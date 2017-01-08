@@ -33,6 +33,7 @@
 #include "stream_textlog.h"
 #include "dump_hex.h"
 #include "usb_base.h"
+#include "home_directory.h"
 
 // these should move to main_loop.h
 extern "C" void main_loop(void *a);
@@ -45,6 +46,7 @@ StreamMenu *root_menu;
 Overlay *overlay;
 C64 *c64;
 C64_Subsys *c64_subsys;
+HomeDirectory *home_directory;
 
 StreamTextLog textLog(65536);
 
@@ -135,7 +137,9 @@ extern "C" void ultimate_main(void *a)
     if(c1541_B) {
     	c1541_B->init();
     }
-	
+
+    home_directory = new HomeDirectory(ui, root_tree_browser);
+    
     printf("All linked modules have been initialized and are now running.\n");
     static char buffer[8192];
     vTaskList(buffer);
@@ -187,6 +191,8 @@ extern "C" void ultimate_main(void *a)
 	    delete tape_controller;
     if(tape_recorder)
 	    delete tape_recorder;
+    if(home_directory)
+        delete home_directory;
     
     printf("Graceful exit!!\n");
 //    return 0;
