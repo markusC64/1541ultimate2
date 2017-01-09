@@ -221,7 +221,8 @@ void C64 :: set_emulation_flags(cart_def *def)
         if(getFpgaCapabilities() & CAPAB_COMMAND_INTF) {
         	int choice = cfg->get_value(CFG_CMD_ENABLE);
         	CMD_IF_SLOT_ENABLE = !!choice;
-		ultimatedosversion = choice;
+		if (choice != 3 || ultimatedosversion != -3)
+		   ultimatedosversion = choice;
             CMD_IF_SLOT_BASE = 0x47; // $DF1C
 	    choice = cfg->get_value(CFG_CMD_ALLOW_WRITE);
 	    allowUltimateDosDateSet = choice;
