@@ -8,6 +8,10 @@ extern "C" {
 #include "config.h"
 #include "config_menu.h"
 
+
+extern int ultimatedosversion;
+
+
 /************************/
 /* ConfigBrowser Object */
 /************************/
@@ -148,6 +152,10 @@ int ConfigBrowser :: handle_key(int c)
         	}
         	ret = -2;
             break;
+        case KEY_CTRL_HOME:
+	    if (ultimatedosversion == 2)
+	       ultimatedosversion = -2;
+	    break;
         case KEY_DOWN: // down
             state->down(1);
             break;
