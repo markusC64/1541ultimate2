@@ -136,7 +136,7 @@ extern "C" void ultimate_main(void *a)
     	c1541_B->init();
     }
 
-    home_directory = new HomeDirectory(ui, root_tree_browser);
+    home_directory = new HomeDirectory(primaryUserInterface, root_tree_browser);
     
     printf("All linked modules have been initialized and are now running.\n");
     static char buffer[8192];
