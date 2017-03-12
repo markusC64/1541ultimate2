@@ -225,6 +225,7 @@ architecture rtl of u2p_nios_solo is
     signal audio_speaker    : signed(12 downto 0);
     signal audio_left       : signed(18 downto 0);
     signal audio_right      : signed(18 downto 0);
+    signal SPEAKER_VOL      : std_logic_vector(3 downto 0);
 begin
     process(RMII_REFCLK)
     begin
@@ -378,6 +379,7 @@ begin
         board_rev  => not BOARD_REVn,
         eth_irq_i  => ETH_IRQn,
         speaker_en => SPEAKER_ENABLE,
+	speaker_vol => SPEAKER_VOL,
         hub_reset_n=> HUB_RESETn,
         ulpi_reset => ulpi_reset_req
     );
@@ -473,6 +475,7 @@ begin
         audio_speaker   => audio_speaker,
         audio_left      => audio_left,
         audio_right     => audio_right,
+	speaker_vol     => SPEAKER_VOL,
         
         -- IEC bus
         iec_reset_i => IEC_RESET,
