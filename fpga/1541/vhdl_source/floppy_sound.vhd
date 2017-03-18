@@ -120,6 +120,7 @@ begin
                     serve_state <= wait_voice2;                    
                 else
                     serve_state <= idle;
+		    motor_sample <= X"00";
 --                    if motor_sample(7)='1' then
 --                        motor_sample <= motor_sample + 1; -- is negative, go to zero
 --                    elsif motor_sample /= 0 then
