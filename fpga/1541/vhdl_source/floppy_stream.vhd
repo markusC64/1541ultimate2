@@ -129,7 +129,7 @@ begin
                 history  := history(3 downto 0) & mem_rd_bit;
                 bit_slip <= '0';
                 bit_flip <= '0';
-                if history = "00000" then -- something weird can happen now:
+                if history = "00000" and mode = '1' then -- something weird can happen now:
                 -- nothing
                 -- bit flip
                 -- bit slip (generates less bits)
