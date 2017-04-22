@@ -365,7 +365,10 @@ int GcrImage :: convert_track_gcr2bin(int track, BinImage *bin_image)
         
 		new_gcr = find_sync(gcr, begin, end);
         if(new_gcr < gcr) {
-//            printf(":W");
+        	if (wrapped) {
+        		break;
+        	}
+        	//            printf(":W");
             wrapped = true;
         }            
         gcr = new_gcr;
@@ -858,8 +861,9 @@ int BinImage :: save(File *file, UserInterface *user_interface)
     }            
 
 	data = &bin_data[683*256];
-	num_tracks -= 35;
-	while(num_tracks--) {
+	int tracks = num_tracks - 35;
+	while(tracks > 0) {
+		tracks--;
 		res = file->write(data, 17*256, &transferred);
         if(user_interface)
             user_interface->update_progress(NULL, 1);
