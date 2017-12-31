@@ -147,6 +147,14 @@ void Dos :: parse_command(Message *command, Message **reply, Message **status)
        if (cmd >= 0x18 && cmd <= 0x1f)   command->message[1] = 0xff;
        if (cmd >= 0x26 && cmd <= 0x2f)   command->message[1] = 0xff;
     }
+    if (ultimatedosversion == -3)
+    {
+       int cmd = command->message[1];
+       if (cmd >= 0x09 && cmd <= 0x0f)   command->message[1] = 0xff;
+       if (cmd >= 0x16 && cmd <= 0x1f)   command->message[1] = 0xff;
+       if (cmd >= 0x23 && cmd <= 0x2f)   command->message[1] = 0xff;
+       if (cmd == 0x15)   command->message[1] = 0x17;
+    }
     
     switch(command->message[1]) {
         case DOS_CMD_IDENTIFY:

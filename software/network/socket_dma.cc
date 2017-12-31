@@ -14,6 +14,7 @@
 #include "dump_hex.h"
 #include "c64.h"
 #include "c64_subsys.h"
+#include "c1541.h"
 
 #define SOCKET_CMD_DMA         0xFF01
 #define SOCKET_CMD_DMARUN      0xFF02
@@ -23,6 +24,8 @@
 #define SOCKET_CMD_DMAWRITE    0xFF06
 #define SOCKET_CMD_REUWRITE    0xFF07
 #define SOCKET_CMD_KERNALWRITE 0xFF08
+#define SOCKET_CMD_MOUNT_IMG   0xFF0A
+#define SOCKET_CMD_RUN_IMG     0xFF0B
 
 
 SocketDMA socket_test; // global that causes the object to exist
@@ -50,7 +53,10 @@ void SocketDMA :: parseBuffer(void *load_buffer, int length)
 		remaining -= 2;
 		uint16_t offs;
 		uint32_t offs32;
+		uint32_t len32;
 		uint16_t i;
+
+		// TODO: check len > remaining
 
 		switch(cmd) {
 		case SOCKET_CMD_DMA:
@@ -91,7 +97,26 @@ void SocketDMA :: parseBuffer(void *load_buffer, int length)
 			for (i=2; i<len; i++)
 			   *(uint8_t *)(C64_KERNAL_BASE+1+2*((offs32+i-2)&0x1fff)) = buf[i];
 			break;
+		case SOCKET_CMD_MOUNT_IMG:
+		case SOCKET_CMD_RUN_IMG:
+			// TODO, let 'len' be uint32_t? Beneficial for REU commands too
+			len32 = (uint32_t)len | (((uint32_t)buf[0]) << 16);
+			buf += 1;
+			if (cmd == SOCKET_CMD_MOUNT_IMG) {
+				c64_command = new SubsysCommand(NULL, SUBSYSID_DRIVE_A, D64FILE_MOUNT,
+					RUNCODE_MOUNT_BUFFER|RUNCODE_NO_CHECKSAVE|RUNCODE_NO_UNFREEZE, buf, len32);
+			} else {
+				c64_command = new SubsysCommand(NULL, SUBSYSID_DRIVE_A, D64FILE_RUN, 
+					RUNCODE_MOUNT_BUFFER, buf, len32);
+				
+			}
+			c64_command->execute();
+			buf += len32;
+			remaining -= len32 + 1;
+			len = 0;
+			break;
 		}
+
 		buf += len;
 		remaining -= len;
 	}
@@ -151,7 +176,7 @@ void SocketDMA::dmaThread(void *load_buffer)
 
 		/* If connection is established then start communicating */
 		char *mempntr = (char *)load_buffer;
-		int max_remain = 65536;
+		int max_remain = SOCKET_BUFFER_SIZE;
 		int received = 0;
 
 		do {
