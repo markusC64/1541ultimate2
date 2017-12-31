@@ -24,8 +24,8 @@
 #define SOCKET_CMD_DMAWRITE    0xFF06
 #define SOCKET_CMD_REUWRITE    0xFF07
 #define SOCKET_CMD_KERNALWRITE 0xFF08
-#define SOCKET_CMD_RUN_IMG     0xFF09
 #define SOCKET_CMD_MOUNT_IMG   0xFF0A
+#define SOCKET_CMD_RUN_IMG     0xFF0B
 
 
 SocketDMA socket_test; // global that causes the object to exist
