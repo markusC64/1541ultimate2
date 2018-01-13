@@ -300,12 +300,13 @@ void C64::set_emulation_flags(cart_def *def)
         if (getFpgaCapabilities() & CAPAB_COMMAND_INTF) {
             int choice = cfg->get_value(CFG_CMD_ENABLE);
             CMD_IF_SLOT_ENABLE = !!choice;
-            ultimatedosversion = choice;
 #ifdef RECOVERYAPP
             CMD_IF_SLOT_BASE = 0x47; // $$DF1C
 #else
             CMD_IF_SLOT_BASE = connectedToU64 ? 0x46 : 0x47; // $DF18 when 1541 U2(+) connected to U64, $DF1C else.
 #endif
+            if (choice != 3 || ultimatedosversion != -3)
+               ultimatedosversion = choice;
             choice = cfg->get_value(CFG_CMD_ALLOW_WRITE);
             allowUltimateDosDateSet = choice;
         }
