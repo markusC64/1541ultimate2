@@ -99,6 +99,12 @@ void do_update(void)
     	console_print(screen, "Done!                            \n");
     }
 
+    if (user_interface->popup("Reset configuration?", BUTTON_YES | BUTTON_NO) == BUTTON_YES) {
+        int num = flash->get_number_of_config_pages();
+        for(int i=0;i<num;i++) {
+            flash->clear_config_page(i);
+        }
+    }
 
     wait_ms(2000);
     console_print(screen, "\nPLEASE TURN OFF YOUR MACHINE.\n");
