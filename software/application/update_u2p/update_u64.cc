@@ -167,16 +167,16 @@ void do_update(void)
     	flash2->protect_configure();
     	flash2->protect_enable();
     	console_print(screen, "Done!                            \n");
-
-        if(user_interface->popup("Reset Configuration? (Recommended)", BUTTON_YES | BUTTON_NO) == BUTTON_YES) {
-            int num = flash2->get_number_of_config_pages();
-            for (int i=0; i < num; i++) {
-                flash2->clear_config_page(i);
-            }
-        }
-
-    	console_print(screen, "\n\033\022Turning OFF machine in 5 seconds....\n");
     }
+
+    if(user_interface->popup("Reset Configuration? (Recommended)", BUTTON_YES | BUTTON_NO) == BUTTON_YES) {
+        int num = flash2->get_number_of_config_pages();
+        for (int i=0; i < num; i++) {
+            flash2->clear_config_page(i);
+        }
+    }
+
+    console_print(screen, "\n\033\022Turning OFF machine in 5 seconds....\n");
 
     wait_ms(5000);
     U64_POWER_REG = 0x2B;
