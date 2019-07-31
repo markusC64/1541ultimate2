@@ -26,6 +26,8 @@ extern "C" {
 #define MENU_READ_STATUS     0xCA1C
 #define MENU_SEND_COMMAND    0xCA1D
 #define MENU_IEC_FLUSH       0xCA1E
+#define MENU_IEC_WARP_10      0xCA1F
+#define MENU_IEC_WARP_11      0xCA20
    
 cart_def warp_cart  = { 0x00, (void *)0, 0x1000, 0x01 | CART_REU | CART_RAM };
 
@@ -323,11 +325,13 @@ const char *IecInterface :: get_root_path(void)
 // called from GUI task
 int IecInterface :: fetch_task_items(Path *path, IndexedList<Action *> &list)
 {
-    int count = 3;
+    int count = 5;
 	list.append(new Action("Flush Printer/Eject Page", SUBSYSID_IEC, MENU_IEC_FLUSH));
 	list.append(new Action("Reset IEC and Printer",    SUBSYSID_IEC, MENU_IEC_RESET));
 	list.append(new Action("UltiCopy 8",     SUBSYSID_IEC, MENU_IEC_WARP_8));
 	list.append(new Action("UltiCopy 9",     SUBSYSID_IEC, MENU_IEC_WARP_9));
+	list.append(new Action("UltiCopy 10",     SUBSYSID_IEC, MENU_IEC_WARP_10));
+	list.append(new Action("UltiCopy 11",     SUBSYSID_IEC, MENU_IEC_WARP_11));
 	// list.append(new Action("IEC Test 1",     SUBSYSID_IEC, MENU_IEC_MASTER_1));
 	// list.append(new Action("IEC Test 2",     SUBSYSID_IEC, MENU_IEC_MASTER_2));
 	// list.append(new Action("IEC Test 3",     SUBSYSID_IEC, MENU_IEC_MASTER_3));
@@ -508,6 +512,12 @@ int IecInterface :: executeCommand(SubsysCommand *cmd)
 			break;
 		case MENU_IEC_WARP_9:
 			start_warp(9);
+			break;
+		case MENU_IEC_WARP_10:
+			start_warp(10);
+			break;
+		case MENU_IEC_WARP_11:
+			start_warp(11);
 			break;
 		case MENU_IEC_MASTER_1:
 			test_master(1);
