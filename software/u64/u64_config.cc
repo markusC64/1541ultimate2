@@ -94,6 +94,25 @@ static SemaphoreHandle_t resetSemaphore;
 #define CFG_SOCKET2_ENABLE    0x46
 #define CFG_EMUSID_SPLIT      0x47
 
+#define CFG_EMUSID1_SIZE      0x48
+#define CFG_EMUSID2_SIZE      0x49
+#define CFG_SID1_SIZE         0x4A
+#define CFG_SID2_SIZE         0x4B
+
+#define CFG_EMUSID1_RESTRICTION 0x4C
+#define CFG_EMUSID2_RESTRICTION 0x4D
+#define CFG_SID1_RESTRICTION  0x4E
+#define CFG_SID2_RESTRICTION  0x4F
+
+#define CFG_SID1_ALT_ADDRESS      0x50
+#define CFG_SID2_ALT_ADDRESS      0x51
+#define CFG_EMUSID1_ALT_ADDRESS   0x52
+#define CFG_EMUSID2_ALT_ADDRESS   0x53
+
+#define CFG_ALT_SID_CFG       0x54
+#define CFG_SHOW_ALT_SID_CFG  0x55
+
+
 #define CFG_SCAN_MODE_TEST    0xA8
 #define CFG_VIC_TEST          0xA9
 
@@ -128,6 +147,12 @@ const char *u64_sid_base[] = { "$D400-$D7FF", // 10 bits
                            "$DF00", "$DF20", "$DF40", "$DF60",
                            "$DF80", "$DFA0", "$DFC0", "$DFE0" };
 
+const char *u64_sid_alt_base[] = {"$D400", "$D420 (< 6 bit)", "$D440 (<  bit)", "$D460 (< 6 bit)", "$D480 (< 8 bit)", "$D4A0 (< 6 bit)", "$D4C0 (< 7 bit)", "$D4E0 (< 6 bit)", "$D500 (< 9 bit)", "$D520 (< 6 bit)", "$D540 (< 7 bit)", "$D560 (< 6 bit)", "$D580 (< 8 bit)", "$D5A0 (< 6 bit)", "$D5C0 (< 7 bit)", "$D5E0 (< 6 bit)", "$D600 (<10 bit)", "$D620 (< 6 bit)", "$D640 (< 7 bit)", "$D660 (< 6 bit)", "$D680 (< 8 bit)", "$D6A0 (< 6 bit)", "$D6C0 (< 7 bit)", "$D6E0 (< 6 bit)", "$D700 (< 9 bit)", "$D720 (< 6 bit)", "$D740 (< 7 bit)", "$D760 (< 6 bit)", "$D780 (< 8 bit)", "$D7A0 (< 6 bit)", "$D7C0 (< 7 bit)", "$D7E0 (< 6 bit)", "$DE00 (<10 bit)", "$DE20 (< 6 bit)", "$DE40 (< 7 bit)", "$DE60 (< 6 bit)", "$DE80 (< 8 bit)", "$DEA0 (< 6 bit)", "$DEC0 (< 7 bit)", "$DEE0 (< 6 bit)", "$DF00 (< 9 bit)", "$DF20 (< 6 bit)", "$DF40 (< 7 bit)", "$DF60 (< 6 bit)", "$DF80 (< 8 bit)", "$DFA0 (< 6 bit)", "$DFC0 (< 7 bit)", "$DFE0 (< 6 bit)"};
+
+const char *u64_sid_size[] = {"off", "10 bit ($400)", "9 bit ($200)", "8 bit ($100)", "7 bit ($80)", "6 bit ($40)", "5 bit ($20)"};
+
+const char *u64_sid_restrictions[] = {"none", "A5=0", "A5=1", "A8=0", "A8=1", "A7=0", "A7=1", "A6=0", "A6=1", "A9=0", "A9=1"};
+
 const char *scan_modes[] = {
 	"VGA 60",
 	"VESA 768x576@60Hz",
@@ -157,6 +182,10 @@ uint8_t u64_sid_mask[]    = { 0xC0, 0xE0, 0xE0, 0xE0, 0xF0, 0xF0, 0xF0, 0xF0, 0x
 						  0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE,
 						  0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE, 0xFE,
 						  };
+
+uint8_t u64_sid_alt_mask[]    = { 0x00, 0xC0,  0xE0, 0xF0, 0xF8, 0xFC, 0xFE };
+
+uint8_t u64_sid_restriction[]    = { 0x00, 0x02, 0x02, 0x10, 0x10, 0x08, 0x08, 0x04, 0x04, 0x20, 0x20 };
 
 static const char *stereo_addr[] = { "Mono", "A5", "A6", "A7", "A8" };
 static const char *en_dis4[] = { "Disabled", "Enabled" };
@@ -251,6 +280,22 @@ struct t_cfg_definition u64_cfg[] = {
     { CFG_EMUSID2_WAVES,        CFG_TYPE_ENUM, "UltiSID 2 Combined Waveforms", "%s", comb_wave,    0,  1, 0 },
     { CFG_EMUSID1_DIGI,         CFG_TYPE_ENUM, "UltiSID 1 Digis Level",        "%s", digi_levels,  0,  3, 2 },
     { CFG_EMUSID2_DIGI,         CFG_TYPE_ENUM, "UltiSID 2 Digis Level",        "%s", digi_levels,  0,  3, 2 },
+
+    { CFG_ALT_SID_CFG,          CFG_TYPE_ENUM, "Alt. SID config", "%s", en_dis4, 0, 1, 0 },
+    { CFG_SHOW_ALT_SID_CFG,     CFG_TYPE_ENUM, "Show Alt. SID config", "%s", en_dis4, 0, 1, 0 },
+    { CFG_SID1_ALT_ADDRESS,   		CFG_TYPE_ENUM, "SID Socket 1 Address",         "%s", u64_sid_alt_base, 0, 47, 0 },
+    { CFG_SID1_SIZE,   		CFG_TYPE_ENUM, "SID Socket 1 Size",         "%s", u64_sid_size, 0, 6, 1 },
+    { CFG_SID1_RESTRICTION,	CFG_TYPE_ENUM, "SID Socket 1 Restriction",         "%s", u64_sid_restrictions, 0, 10, 0 },
+    { CFG_SID2_ALT_ADDRESS,   		CFG_TYPE_ENUM, "SID Socket 2 Address",         "%s", u64_sid_alt_base, 0, 47, 0 },
+    { CFG_SID2_SIZE,   		CFG_TYPE_ENUM, "SID Socket 2 Size",         "%s", u64_sid_size, 0, 6, 0 },
+    { CFG_SID2_RESTRICTION,	CFG_TYPE_ENUM, "SID Socket 2 Restriction",         "%s", u64_sid_restrictions, 0, 10, 0 },
+    { CFG_EMUSID1_ALT_ADDRESS,   	CFG_TYPE_ENUM, "UltiSID 1 Address",            "%s", u64_sid_alt_base, 0, 47, 0 },
+    { CFG_EMUSID1_SIZE,   	CFG_TYPE_ENUM, "UltiSID 1 Size",            "%s", u64_sid_size, 0, 6, 0 },
+    { CFG_EMUSID1_RESTRICTION,	CFG_TYPE_ENUM, "UltiSID 1 Restriction",         "%s", u64_sid_restrictions, 0, 10, 0 },
+    { CFG_EMUSID2_ALT_ADDRESS,   	CFG_TYPE_ENUM, "UltiSID 2 Address",            "%s", u64_sid_alt_base, 0, 47, 0 },
+    { CFG_EMUSID2_SIZE,   	CFG_TYPE_ENUM, "UltiSID 2 Size",            "%s", u64_sid_size, 0, 6, 0 },
+    { CFG_EMUSID2_RESTRICTION,	CFG_TYPE_ENUM, "UltiSID 2 Restriction",         "%s", u64_sid_restrictions, 0, 10, 0 },
+
 #if DEVELOPER
     { CFG_VIC_TEST,             CFG_TYPE_ENUM, "VIC Test Colors",              "%s", en_dis5,      0,  2, 0 },
 #endif
@@ -354,7 +399,7 @@ U64Config :: U64Config() : SubSystem(SUBSYSID_U64)
         for (uint8_t b = CFG_MIXER0_PAN; b <= CFG_MIXER9_PAN; b++) {
             cfg->set_change_hook(b, U64Config::setMixer);
         }
-
+        
         cfg->set_change_hook(CFG_EMUSID1_FILTER, U64Config::setFilter);
         cfg->set_change_hook(CFG_EMUSID2_FILTER, U64Config::setFilter);
         cfg->set_change_hook(CFG_SCAN_MODE_TEST, U64Config::setScanMode);
@@ -421,6 +466,8 @@ void U64Config :: effectuate_settings()
     if(!cfg)
         return;
 
+    updateHiddenState();
+    
     uint8_t sp_vol = cfg->get_value(CFG_SPEAKER_VOL);
 
     U2PIO_SPEAKER_EN = sp_vol ? (sp_vol << 1) | 0x01 : 0;
@@ -464,7 +511,88 @@ void U64Config :: effectuate_settings()
         uint8_t value = reg | (shu << 2) | (cap << 3);
         C64_PLD_SIDCTRL2 = value | 0xB0;
     }
-
+    
+    if (cfg->get_value(CFG_ALT_SID_CFG))
+    {
+      {
+         uint8_t myAddr = 64+2*(uint8_t) cfg->get_value(CFG_SID1_ALT_ADDRESS);
+         if (myAddr >= 0x80) myAddr += 0x60;
+         uint8_t myMask = u64_sid_alt_mask[cfg->get_value(CFG_SID1_SIZE)];
+         uint8_t myRestrIdx = cfg->get_value(CFG_SID1_RESTRICTION);
+         uint8_t myRestr = u64_sid_restriction[myRestrIdx];
+   
+         if (myMask)  myAddr &= myMask;
+         if (myRestrIdx) {
+             myMask |= myRestr;
+             if (myRestrIdx & 1)
+                 myAddr &= ~myRestr;
+             else
+                 myAddr |= myRestr;
+         }
+         C64_SID1_BASE    =  C64_SID1_BASE_BAK = myAddr;
+         C64_SID1_MASK	 =  C64_SID1_MASK_BAK = myMask;
+      }
+   
+      {
+         uint8_t myAddr = 64+2*(uint8_t) cfg->get_value(CFG_SID2_ALT_ADDRESS);
+         if (myAddr >= 0x80) myAddr += 0x60;
+         uint8_t myMask = u64_sid_alt_mask[cfg->get_value(CFG_SID2_SIZE)];
+         uint8_t myRestrIdx = cfg->get_value(CFG_SID2_RESTRICTION);
+         uint8_t myRestr = u64_sid_restriction[myRestrIdx];
+   
+         if (myMask)  myAddr &= myMask;
+         if (myRestrIdx) {
+             myMask |= myRestr;
+             if (myRestrIdx & 1)
+                 myAddr &= ~myRestr;
+             else
+                 myAddr |= myRestr;
+         }
+         C64_SID2_BASE    =  C64_SID2_BASE_BAK = myAddr;
+         C64_SID2_MASK	 =  C64_SID2_MASK_BAK = myMask;
+      }
+   
+      {
+         uint8_t myAddr = 64+2*(uint8_t) cfg->get_value(CFG_EMUSID1_ALT_ADDRESS);
+         if (myAddr >= 0x80) myAddr += 0x60;
+         uint8_t myMask = u64_sid_alt_mask[cfg->get_value(CFG_EMUSID1_SIZE)];
+         uint8_t myRestrIdx = cfg->get_value(CFG_EMUSID1_RESTRICTION);
+         uint8_t myRestr = u64_sid_restriction[myRestrIdx];
+   
+         if (myMask)  myAddr &= myMask;
+         if (myRestrIdx) {
+             myMask |= myRestr;
+             if (myRestrIdx & 1)
+                 myAddr &= ~myRestr;
+             else
+                 myAddr |= myRestr;
+         }
+         C64_EMUSID1_BASE    =  C64_EMUSID1_BASE_BAK = myAddr;
+         C64_EMUSID1_MASK	 =  C64_EMUSID1_MASK_BAK = myMask;
+      }
+   
+      {
+         uint8_t myAddr = 64+2*(uint8_t) cfg->get_value(CFG_EMUSID2_ALT_ADDRESS);
+         if (myAddr >= 0x80) myAddr += 0x60;
+         uint8_t myMask = u64_sid_alt_mask[cfg->get_value(CFG_EMUSID2_SIZE)];
+         uint8_t myRestrIdx = cfg->get_value(CFG_EMUSID2_RESTRICTION);
+         uint8_t myRestr = u64_sid_restriction[myRestrIdx];
+   
+         if (myMask)  myAddr &= myMask;
+         if (myRestrIdx) {
+             myMask |= myRestr;
+             if (myRestrIdx & 1)
+                 myAddr &= ~myRestr;
+             else
+                 myAddr |= myRestr;
+         }
+         C64_EMUSID2_BASE = C64_EMUSID2_BASE_BAK = myAddr;
+         C64_EMUSID2_MASK = C64_EMUSID2_MASK_BAK = myMask;
+      }
+     	
+    }
+    else
+    {
     C64_SCANLINES    =  cfg->get_value(CFG_SCANLINES);
     C64_PADDLE_EN    =  cfg->get_value(CFG_PADDLE_EN);
     C64_STEREO_ADDRSEL = C64_STEREO_ADDRSEL_BAK = cfg->get_value(CFG_STEREO_DIFF);
@@ -486,6 +614,7 @@ void U64Config :: effectuate_settings()
     C64_SID2_MASK	 =  C64_SID2_MASK_BAK = mask4;
     C64_EMUSID1_MASK =  C64_EMUSID1_MASK_BAK = mask1;
     C64_EMUSID2_MASK =  C64_EMUSID2_MASK_BAK = mask2;
+    }
     C64_EMUSID_SPLIT =  C64_EMUSID_SPLIT_BAK = cfg->get_value(CFG_EMUSID_SPLIT);
     U64_HDMI_ENABLE  =  cfg->get_value(CFG_HDMI_ENABLE);
     U64_PARCABLE_EN  =  cfg->get_value(CFG_PARCABLE_ENABLE);
@@ -670,6 +799,36 @@ void U64Config :: setSidEmuParams(ConfigItem *it)
         break;
     }
 }
+
+void U64Config :: updateHiddenState()
+{
+    int advancedConfiguration = cfg->get_value(CFG_ALT_SID_CFG);
+    int showAdvConfig = cfg->get_value(CFG_SHOW_ALT_SID_CFG);
+    
+    cfg->setVisible(CFG_SHOW_ALT_SID_CFG, showAdvConfig != 0);
+    
+    cfg->setVisible(CFG_ALT_SID_CFG, (showAdvConfig != 0) || (advancedConfiguration != 0));
+
+    cfg->setVisible(CFG_SID1_ADDRESS, advancedConfiguration == 0);
+    cfg->setVisible(CFG_SID2_ADDRESS, advancedConfiguration == 0);
+    cfg->setVisible(CFG_EMUSID1_ADDRESS, advancedConfiguration == 0);
+    cfg->setVisible(CFG_EMUSID2_ADDRESS, advancedConfiguration == 0);
+
+    cfg->setVisible(CFG_EMUSID1_SIZE, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_EMUSID2_SIZE, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID1_SIZE, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID2_SIZE, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_EMUSID1_RESTRICTION, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_EMUSID2_RESTRICTION, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID1_RESTRICTION, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID2_RESTRICTION, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID1_ALT_ADDRESS, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_SID2_ALT_ADDRESS, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_EMUSID1_ALT_ADDRESS, (advancedConfiguration != 0) && (showAdvConfig != 0));
+    cfg->setVisible(CFG_EMUSID2_ALT_ADDRESS, (advancedConfiguration != 0) && (showAdvConfig != 0));
+}
+
+
 
 #define MENU_U64_SAVEEDID 1
 #define MENU_U64_SAVEEEPROM 2

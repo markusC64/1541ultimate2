@@ -302,6 +302,14 @@ void ConfigStore :: disable(uint8_t id)
     }
 }
 
+void ConfigStore :: setVisible(uint8_t id, bool vi)
+{
+    ConfigItem *i = find_item(id);
+    if (i) {
+        i->setVisible(vi);
+    }
+}
+
 int ConfigStore :: get_value(uint8_t id)
 {
     ConfigItem *i = find_item(id);
@@ -399,6 +407,7 @@ ConfigItem :: ConfigItem(ConfigStore *s, t_cfg_definition *d)
         string = NULL;
     }
     enabled = true;
+    visible = true;
     reset();
 }
 

@@ -62,6 +62,7 @@ class ConfigItem
 {
 	t_change_hook hook;
 	bool enabled;
+	bool visible;
 public:    
     ConfigStore *store;
     t_cfg_definition *definition;
@@ -82,7 +83,9 @@ public:
     void setChanged(void);
     void setChangeHook(t_change_hook hook) { this->hook = hook; }
     bool isEnabled(void) { return enabled; }
+    bool isVisible(void) { return visible; }
     void setEnabled(bool en) { enabled = en; }
+    void setVisible(bool vi) { visible = vi; }
 };
 
 
@@ -120,6 +123,7 @@ public:
 
     void set_change_hook(uint8_t id, t_change_hook hook);
     void disable(uint8_t id);
+    void setVisible(uint8_t id, bool vi);
 
     ConfigItem *find_item(uint8_t id);
     int  get_value(uint8_t id);

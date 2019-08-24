@@ -108,7 +108,8 @@ public:
 			IndexedList<ConfigItem *> *itemList = store->getItems();
 			store->at_open_config();
 			for (int i=0; i < itemList->get_elements(); i++) {
-				children.append(new BrowsableConfigItem((*itemList)[i]));
+				if ((*itemList)[i]->isVisible())
+					children.append(new BrowsableConfigItem((*itemList)[i]));
 			}
 		}
 		return &children;

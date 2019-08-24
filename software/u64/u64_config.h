@@ -48,6 +48,7 @@ public:
     static void setLedSelector(ConfigItem *it);
     static void SetResampleFilter(int mode);
 
+    void updateHiddenState(void);
     bool SidAutoConfig(int count, t_sid_definition *requested);
 };
 
