@@ -925,13 +925,7 @@ void C64 :: start_cartridge(void *vdef, bool startLater)
 
     // If we are called from the overlay or telnet menu, it may be so that the C64 is not even frozen.
     // In this case, we need to stop the machine first in order to poke anything into memory
-    if (!C64_HAS_STOPPED) {
-        C64_STOP_MODE = STOP_COND_FORCE;
-        C64_STOP = 1;
-        // wait until it is stopped (it always will!)
-        while (!C64_HAS_STOPPED)
-            ;
-    }
+    stop();
     // Now that the machine is stopped, we can clear certain VIC registers. This is required for the FC3
     // cartridge, but maybe also for others. Obviously, we may not know in what mode we are, so we
     // force Ultimax mode, so that the IO range is accessible.
