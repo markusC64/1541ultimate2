@@ -542,6 +542,7 @@ begin
         kernal_area     => kernal_area,
         kernal_enable   => control.kernal_enable,
         kernal_16k      => control.kernal_16k,
+        kernal_24k      => control.kernal_24k,
         
         irq_n           => irq_n,
         nmi_n           => nmi_n,

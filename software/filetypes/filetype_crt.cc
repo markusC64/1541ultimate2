@@ -725,15 +725,24 @@ void FileTypeCRT::configure_cart(void)
 #endif
         break;
     case CART_EXOS:
-        if (total_read > 8192) {
+        if (total_read > 16384) {
+            C64_KERNAL_ENABLE = 5;
+            uint8_t *src = (uint8_t *) (((uint32_t)C64_CARTRIDGE_ROM_BASE) << 16);
+            uint8_t *dst = (uint8_t *) (C64_KERNAL_BASE);
+            for (int i=0; i<8192; i++)
+            {
+               *(dst+4*i+1) = *(src+i);
+               *(dst+4*i+2) = *(src+8192+i);
+               *(dst+4*i+3) = *(src+16384+i);
+            }
+        } else if (total_read > 8192) {
             C64_KERNAL_ENABLE = 3;
             uint8_t *src = (uint8_t *) (((uint32_t)C64_CARTRIDGE_ROM_BASE) << 16);
-            for (int i = 16383; i > 0; i--)
-                *(src + 4 * i) = *(src + i);
-            for (int i = 8191; i >= 0; i--)
+            uint8_t *dst = (uint8_t *) (C64_KERNAL_BASE);
+            for (int i=0; i<8192; i++)
             {
-                *(src + 4 * i + 1) = *(src + 4*i);
-                *(src + 4 * i + 2) = *(src + 32768 + 4*i);
+               *(dst+4*i+1) = *(src+i);
+               *(dst+4*i+2) = *(src+8192+i);
             }
         } else {
             uint8_t *src = (uint8_t *) (((uint32_t)C64_CARTRIDGE_ROM_BASE) << 16);
