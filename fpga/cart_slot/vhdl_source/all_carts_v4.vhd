@@ -21,6 +21,7 @@ port (
     
     kernal_enable   : in  std_logic;
     kernal_16k      : in  std_logic;
+    kernal_24k      : in  std_logic;
     kernal_area     : in  std_logic;
     freeze_trig     : in  std_logic; -- goes '1' when the button has been pressed and we're waiting to enter the freezer
     freeze_act      : in  std_logic; -- goes '1' when we need to switch in the cartridge for freeze mode
@@ -65,6 +66,8 @@ architecture gideon of all_carts_v4 is
     signal ef_write     : std_logic_vector(2 downto 0);
     signal ef_write_addr : std_logic_vector(21 downto 0);
     signal georam_bank  : std_logic_vector(15 downto 0);
+    signal current_kernal_bank : std_logic_vector(1 downto 0);
+    signal current_kernal_state : std_logic_vector(2 downto 0);
     
 --    signal rom_enable   : std_logic;
 
@@ -161,6 +164,8 @@ begin
                 cart_en      <= '1';
 --                unfreeze     <= '0';
                 hold_nmi     <= '0';
+                current_kernal_bank <= "00";
+                current_kernal_state <= "000";
             elsif freeze_act='1' and freeze_act_d='0' then
                 bank_bits  <= (others => '0');
                 mode_bits  <= (others => '0');
@@ -737,14 +742,72 @@ begin
                 cart_en  <= '0';
                 hold_nmi <= '0';
             end if;
+
+            if kernal_area='1' then
+                -- Add condition "access is to ROM" to condition? Maybe with cached HIRAM from last access if real HIRAM is not available in time
+                if slot_addr(15 downto 8) = "11100100" and ( slot_addr(7 downto 5) = "011" or slot_addr(7 downto 5) = "100" ) and slot_rwn='1' then
+
+                  case current_kernal_state is
+                    when "000" =>
+                        case slot_addr(7 downto 0) is
+                            when X"60" =>  current_kernal_state <= "001";
+                            when others => current_kernal_state <= "000";
+                        end case;
+                    
+                    when "001" =>
+                        case slot_addr(7 downto 0) is
+                            when X"60" =>  current_kernal_state <= "001";
+                            when X"94" =>  current_kernal_state <= "010";
+                            when others => current_kernal_state <= "000";
+                        end case;
+                    
+                    when "010" =>
+                        case slot_addr(7 downto 0) is
+                            when X"94" =>  current_kernal_state <= "010";
+                            when X"64" =>  current_kernal_state <= "011";
+                            when others => current_kernal_state <= "000";
+                        end case;
+                    
+                    when "011" =>
+                        case slot_addr(7 downto 0) is
+                            when X"64" =>  current_kernal_state <= "011";
+                            when X"62" =>  current_kernal_state <= "100";
+                            when others => current_kernal_state <= "000";
+                        end case;
+                    
+                    when "100" =>
+                        case slot_addr(7 downto 0) is
+                            when X"62" =>  current_kernal_state <= "100";
+                            when X"95" =>  current_kernal_state <= "101";
+                            when others => current_kernal_state <= "000";
+                        end case;
+                    
+                    when others =>
+                       if  slot_addr(7 downto 2) = "100000" and slot_addr(1 downto 0) /= "11" then
+                           current_kernal_bank <= slot_addr(1 downto 0);
+                       end if;
+                       if slot_addr(7 downto 0) /= X"95" then
+                           current_kernal_state <= "000";
+                       end if;
+                  end case;
+                  
+                  --  In case of writes: set state back:
+                  if slot_rwn='0' then
+                      current_kernal_state <= "000";
+                  end if;
+                
+                end if;
+            end if;
+
         end if;
+        
     end process;
 
     CART_LEDn <= not cart_en;
 
     -- determine address
     process(cart_logic_d, slot_addr, mode_bits, bank_bits, ext_bank, do_io2, allow_bank, 
-            kernal_area, kernal_16k, georam_bank, sense, ef_write, ef_write_addr)
+            kernal_area, kernal_16k, kernal_24k, georam_bank, sense, ef_write, ef_write_addr)
     begin
         mem_addr_i <= g_rom_base;
 
@@ -914,12 +977,16 @@ begin
         end case;
 
         if kernal_area='1' then
-            if kernal_16k='0' then
+            if kernal_16k='0' and kernal_24k='0' then
                 mem_addr_i <= g_kernal_base(27 downto 14) & slot_addr(12 downto 0) & '0';
                 kernal_bank <= "00";
             else
-                mem_addr_i <= g_rom_base(27 downto 15) & slot_addr(12 downto 0) & '0' & '0';
-                kernal_bank <= '0' & (not sense);
+                mem_addr_i <= g_kernal_base(27 downto 15) & slot_addr(12 downto 0) & '0' & '0';
+                if kernal_16k='1' then
+                   kernal_bank <= '0' & (not sense);
+                else
+                   kernal_bank <= current_kernal_bank;
+                end if;
             end if;
         else
             kernal_bank <= "00";
