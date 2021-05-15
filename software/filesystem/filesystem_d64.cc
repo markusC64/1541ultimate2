@@ -243,6 +243,7 @@ FRESULT FileSystemCBM::sync(void)
         }
         root_dirty = false;
     }
+    prt->ioctl(CTRL_SYNC, NULL);
     return FR_OK;
 }
 
@@ -1186,6 +1187,7 @@ FRESULT FileSystemDNP :: sync(void)
         bam += 512;
     }
     bam_dirty = 0;
+    prt->ioctl(CTRL_SYNC, NULL);
     return fres;
 }
 
