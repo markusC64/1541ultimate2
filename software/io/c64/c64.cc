@@ -70,6 +70,7 @@ static const char *cartmodes[] = { "Auto", "Internal", "External", "Manual" };
 static const char *bus_modes[] = { "Quiet", "Writes", "Dynamic", "Dyn. & Writes" };
 static const uint8_t bus_mode_values[] = { 0x00, 0x01, 0x02, 0x03, 0x04 };
 static const char *bus_sharing[] = { "Internal", "External", "Both" };
+static const char *ramext_type[] = { "Disabled", "REU", "GeoRAM" };
 
 struct t_cfg_definition c64_config[] = {
     { CFG_C64_CART_CRT,    CFG_TYPE_STRFUNC,"Cartridge",                  "%s", (const char **)C64 :: list_crts,  0, 30, (int)"" },
@@ -89,7 +90,7 @@ struct t_cfg_definition c64_config[] = {
 #else
     { CFG_C64_KERNFILE, CFG_TYPE_STRFUNC, "Alternate Kernal",             "%s", (const char **)C64 :: list_kernals, 0, 30, (int)"" },
 #endif
-    { CFG_C64_REU_EN,   CFG_TYPE_ENUM,   "RAM Expansion Unit",           "%s", en_dis,     0,  1, 0 },
+    { CFG_C64_REU_EN,   CFG_TYPE_ENUM,   "RAM Extension",                "%s", ramext_type,0,  2, 0 },
     { CFG_C64_REU_SIZE, CFG_TYPE_ENUM,   "REU Size",                     "%s", reu_size,   0,  7, 4 },
     { CFG_C64_REU_PRE,  CFG_TYPE_ENUM,   "REU Preload",                  "%s", en_dis,     0,  1, 0 },
     { CFG_C64_REU_IMG,  CFG_TYPE_STRING, "REU Preload Image",            "%s", NULL,       0, 31, (int)"/Usb0/preload.reu" },
@@ -287,7 +288,7 @@ void C64::set_emulation_flags(void)
     }
 
     C64_REU_SIZE = cfg->get_value(CFG_C64_REU_SIZE);
-    if (cfg->get_value(CFG_C64_REU_EN)) {
+    if (cfg->get_value(CFG_C64_REU_EN) == 1) {
         C64_REU_ENABLE = 1;
     }
     if (getFpgaCapabilities() & CAPAB_SAMPLER) {
@@ -941,7 +942,10 @@ void C64::set_cartridge(cart_def *cart)
     printf("Required: %4x\n", def->require);
     printf("Prohibited: %4x\n", def->prohibit);
 
-    C64_CARTRIDGE_TYPE = (uint8_t) def->type;
+    if ( (def->type == 0) && (cfg->get_value(CFG_C64_REU_EN) == 2))
+        C64_CARTRIDGE_TYPE = CART_TYPE_GEORAM;
+    else
+        C64_CARTRIDGE_TYPE = (uint8_t) def->type;
 
     set_emulation_flags();
 
