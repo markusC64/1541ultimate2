@@ -818,7 +818,7 @@ int  UsbBase :: bulk_out(struct t_pipe *pipe, void *buf, int len, int timeout)
 	return total_trans;
 }
 
-int  UsbBase :: bulk_in(struct t_pipe *pipe, void *buf, int len, int timeout, int retries) // blocking
+int  UsbBase :: bulk_in(struct t_pipe *pipe, void *buf, int len, int timeout) // blocking
 {
     if (!xSemaphoreTake(mutex, 5000)) {
     	printf("%s USB unavailable.\n", pipe->name);
@@ -848,6 +848,7 @@ int  UsbBase :: bulk_in(struct t_pipe *pipe, void *buf, int len, int timeout, in
 	descr->memLo = addr & 0xFFFF;
 	descr->timeout = (uint16_t)timeout;
 
+	int retries = 5;
 	do {
 		int current_len = (len > 49152) ? 49152 : len;
 		descr->length = current_len;
