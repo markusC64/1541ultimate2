@@ -210,6 +210,7 @@ int C64_CRT::read_chip_packet(File *f, t_crt_chip_chunk *chunk)
 {
     uint8_t *chip_header = chunk->header;
     chunk->ram_location = NULL;
+    chunk->mandatory = true;
 
     uint32_t bytes_read;
     FRESULT res = f->read(chip_header, 0x10, &bytes_read);
@@ -323,6 +324,35 @@ void C64_CRT::patch_easyflash_eapi()
             memcpy(original_eapi, eapi, 768);
             memcpy(eapi, &_eapi_65_start, 768);
             printf("EAPI successfully patched!\n");
+        }
+        
+        for (int i=0; i<chip_chunks.get_elements(); i++) {
+            t_crt_chip_chunk *cc = chip_chunks[i];
+            if (cc) {
+                delete cc;
+            }
+        }
+        chip_chunks.clear_list();
+        
+        static const uint8_t chip_header[16] = { 0x43, 0x48, 0x49, 0x50, 0x00, 0x02, 0x20, 0x10, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x20, 0x00};
+
+        for (int i=0; i<64; i++)
+        {
+            t_crt_chip_chunk *ch = new t_crt_chip_chunk;
+            ch->mandatory = false;
+            memcpy(ch->header, chip_header, 16);
+            ch->header[11] = (uint8_t) i;
+            ch->header[12] = 0x80;
+            ch->ram_location = cart_memory + uint32_t(i) * 16384;
+            chip_chunks.append(ch);
+
+            ch = new t_crt_chip_chunk;
+            ch->mandatory = false;
+            memcpy(ch->header, chip_header, 16);
+            ch->header[11] = (uint8_t) i;
+            ch->header[12] = 0xA0;
+            ch->ram_location = cart_memory + uint32_t(i) * 16384 + 8192;
+            chip_chunks.append(ch);
         }
     }
 }
@@ -594,10 +624,7 @@ int C64_CRT::save_crt(File *fo)
         t_crt_chip_chunk *cc = crt->chip_chunks[i];
         uint16_t size = get_word(cc->header + CRTCHP_SIZE);
         uint16_t load = get_word(cc->header + CRTCHP_LOAD);
-        res = fo->write(cc->header, 0x10, &written);
-        if (res != FR_OK) {
-            break;
-        }
+        
 
         // Get EEPROM state from Hardware
         if ((load == 0xDE00) && (size == 0x800)) {
@@ -607,6 +634,23 @@ int C64_CRT::save_crt(File *fo)
                     C64 :: get_eeprom_data(cc->ram_location);
                 }
             }
+        }
+
+        if (!cc->mandatory)
+        {
+           bool empty = true;
+           for (int i=0; i<size; i++)
+              if (cc->ram_location[i] != 255)
+                 empty = false;
+                 
+           if (empty)
+               continue;
+        }
+        
+        
+        res = fo->write(cc->header, 0x10, &written);
+        if (res != FR_OK) {
+            break;
         }
 
         res = fo->write(cc->ram_location, size, &written);
@@ -643,6 +687,7 @@ void C64_CRT :: find_eeprom(void)
 
     // EEPROM chunk not found, so let's create one and clear it.
     t_crt_chip_chunk *ch = new t_crt_chip_chunk;
+    ch->mandatory = true;
     const uint8_t eeprom_header[16] = { 0x43, 0x48, 0x49, 0x50, 0x00, 0x00, 0x08, 0x10,
                                         0x00, 0x00, 0x00, 0x00, 0xDE, 0x00, 0x08, 0x00
     };

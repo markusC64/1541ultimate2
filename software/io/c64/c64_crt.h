@@ -52,6 +52,7 @@ class C64_CRT
     {
         uint8_t header[0x10];
         uint8_t *ram_location;
+        bool mandatory;
     };
 
     const static struct t_cart c_recognized_c64_carts[];
