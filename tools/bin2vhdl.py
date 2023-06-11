@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 header = """
 library ieee;
 use ieee.std_logic_1164.all;
