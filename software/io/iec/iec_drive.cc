@@ -15,15 +15,50 @@
 #define MENU_IEC_OFF         0xCA0F
 #define MENU_IEC_RESET       0xCA10
 #define MENU_IEC_SET_DIR     0xCA17
+#define MENU_IEC_SET_ROOT    0xCA18
+#define MENU_IEC_CFG_ROOT    0xCA19
    
-#define CFG_IEC_ENABLE   0x51
-#define CFG_IEC_BUS_ID   0x52
-#define CFG_IEC_PATH     0x53
+#define CFG_IEC_ENABLE       0x51
+#define CFG_IEC_BUS_ID       0x52
+#define CFG_IEC_PATH         0x53
+#define CFG_IEC_PATH01       0x54
+#define CFG_IEC_PATH02       0x55
+#define CFG_IEC_PATH03       0x56
+#define CFG_IEC_PATH04       0x57
+#define CFG_IEC_PATH05       0x58
+#define CFG_IEC_PATH06       0x59
+#define CFG_IEC_PATH07       0x5A
+#define CFG_IEC_PATH08       0x5B
+#define CFG_IEC_PATH09       0x5C
+#define CFG_IEC_PATH10       0x5D
+#define CFG_IEC_PATH11       0x5E
+#define CFG_IEC_PATH12       0x5F
+
+#define CFG_IEC_0_IS_CURRENT 0x60
+#define CFG_IEC_PATHS        0x61
+#define CFG_IEC_HOME1        0x62
+#define CFG_IEC_HOME2        0x63
 
 static struct t_cfg_definition iec_config[] = {
     { CFG_IEC_ENABLE,    CFG_TYPE_ENUM,   "IEC Drive",         "%s", en_dis, 0,  1, 0 },
     { CFG_IEC_BUS_ID,    CFG_TYPE_VALUE,  "Soft Drive Bus ID", "%d", NULL,   8, 30, 11 },
     { CFG_IEC_PATH,      CFG_TYPE_STRING, "Default Path",      "%s", NULL,   0, 30, (long int)FS_ROOT },
+    { CFG_IEC_PATH01,    CFG_TYPE_STRING, "Part. 1 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH02,    CFG_TYPE_STRING, "Part. 2 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH03,    CFG_TYPE_STRING, "Part. 3 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH04,    CFG_TYPE_STRING, "Part. 4 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH05,    CFG_TYPE_STRING, "Part. 5 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH06,    CFG_TYPE_STRING, "Part. 6 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH07,    CFG_TYPE_STRING, "Part. 7 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH08,    CFG_TYPE_STRING, "Part. 8 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH09,    CFG_TYPE_STRING, "Part. 9 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH10,    CFG_TYPE_STRING, "Part. 10 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH11,    CFG_TYPE_STRING, "Part. 11 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_PATH12,    CFG_TYPE_STRING, "Part. 12 Default Path", "%s", NULL,   0, 30, (long int)""},
+    { CFG_IEC_0_IS_CURRENT, CFG_TYPE_ENUM, "Partition 0 is curr. Part.",      "%s", en_dis,   0, 1, 1 },
+    { CFG_IEC_PATHS,     CFG_TYPE_ENUM, "CMD Path syntax",      "%s", en_dis,   0, 1, 1 },
+    { CFG_IEC_HOME1,     CFG_TYPE_ENUM, "CD_ is Home",      "%s", en_dis,   0, 1, 0 },
+    { CFG_IEC_HOME2,     CFG_TYPE_ENUM, "CD:_ is Home",      "%s", en_dis,   0, 1, 1 },
     { 0xFF, CFG_TYPE_END, "", "", NULL, 0, 0, 0 }
 };
 
@@ -187,10 +222,58 @@ void IecDrive :: effectuate_settings(void)
     intf->configure();
 }
 
-const char *IecDrive :: get_root_path(void)
+const char *IecDrive :: get_root_path(int partition)
 {
+    if (partition >= 1 && partition <= 12)
+    {
+       const char *tmp =cfg->get_string(CFG_IEC_PATH+partition);
+       if (tmp && *tmp) return tmp;
+       return 0;
+    }
+    
     return rootPath;
+    #if 0
+    if (!*rootPath)
+    {
+       return mstring(0);
+    }
+
+    char temp[120];
+    char temp2[8];
+
+    strcpy(temp, rootPath);
+    if (temp[strlen(temp) - 1] != '/') {
+       strcat(temp, "/");
+    }
+    sprintf(temp2, "%d", partition);
+    strcat(temp, temp2);
+
+    return temp;
+    #endif
 }
+
+int IecDrive :: get_0_is_current()
+{
+   return cfg->get_value(CFG_IEC_0_IS_CURRENT);
+}
+
+int IecDrive :: get_cmd_paths()
+{
+   return cfg->get_value(CFG_IEC_PATHS);
+}
+
+int IecDrive :: get_cmd_home1()
+{
+   return cfg->get_value(CFG_IEC_HOME1);
+}
+
+int IecDrive :: get_cmd_home2()
+{
+   return cfg->get_value(CFG_IEC_HOME2);
+}
+
+
+
 
 void IecDrive :: create_task_items(void)
 {
@@ -198,12 +281,16 @@ void IecDrive :: create_task_items(void)
     myActions.turn_on	 = new Action("Turn On",        SUBSYSID_IEC, MENU_IEC_ON);
     myActions.reset      = new Action("Reset",          SUBSYSID_IEC, MENU_IEC_RESET);
     myActions.set_dir    = new Action("Set dir. here",  SUBSYSID_IEC, MENU_IEC_SET_DIR);
+    myActions.set_root   = new Action("Set root here",  SUBSYSID_IEC, MENU_IEC_SET_ROOT);
+    myActions.set_cfg    = new Action("Cfg. root here",  SUBSYSID_IEC, MENU_IEC_CFG_ROOT);
     myActions.turn_off	 = new Action("Turn Off",       SUBSYSID_IEC, MENU_IEC_OFF);
 
     iec->append(myActions.turn_on);
     iec->append(myActions.turn_off);
     iec->append(myActions.reset);
     iec->append(myActions.set_dir);
+    iec->append(myActions.set_root);
+    iec->append(myActions.set_cfg);
 }
 
 // called from GUI task
@@ -242,12 +329,61 @@ SubsysResultCode_e IecDrive :: executeCommand(SubsysCommand *cmd)
             reset();
 			break;
 		case MENU_IEC_SET_DIR:
-            path = cmd->path.c_str();
-            pathcopy = new char[strlen(path) + 1];
-            strcpy(pathcopy, path);
-            cb = { this, set_iec_dir, pathcopy };
-            intf->run_from_iec(&cb);
+    {
+            char partNo[17] = { 0 };
+            int partition;
+            if (cmd->user_interface->string_box("Partition number", partNo, 16) > 0) {
+               sscanf(partNo, "%d", &partition);
+               PartitionAndPath *pap = new PartitionAndPath();
+               pap->partition =  partition;
+               
+               path = cmd->path.c_str();
+               pathcopy = new char[strlen(path) + 1];
+               strcpy(pathcopy, path);
+               pap->Path  = pathcopy;
+               cb = { this, set_iec_dir, pap };
+               intf->run_from_iec(&cb);
+            }
     	    break;
+    }
+		case MENU_IEC_SET_ROOT:
+    {
+            char partNo[17] = { 0 };
+            int partition;
+            if (cmd->user_interface->string_box("Partition number", partNo, 16) > 0) {
+               sscanf(partNo, "%d", &partition);
+               PartitionAndPath *pap = new PartitionAndPath();
+               pap->partition =  partition;
+               
+               path = cmd->path.c_str();
+               pathcopy = new char[strlen(path) + 1];
+               strcpy(pathcopy, path);
+               pap->Path  = pathcopy;
+               cb = { this, set_iec_root, pap };
+               intf->run_from_iec(&cb);
+            }
+    	    break;
+    }
+		case MENU_IEC_CFG_ROOT:
+    {
+            char partNo[17] = { 0 };
+            int partition;
+            if (cmd->user_interface->string_box("Partition number", partNo, 16) > 0) {
+               sscanf(partNo, "%d", &partition);
+               PartitionAndPath *pap = new PartitionAndPath();
+               pap->partition =  partition;
+               
+               path = cmd->path.c_str();
+               pathcopy = new char[strlen(path) + 2];
+               strcpy(pathcopy, path);
+               if (path[1])
+                  strcat(pathcopy, "/");
+               pap->Path  = pathcopy;
+               cb = { this, set_iec_cfg, pap };
+               intf->run_from_iec(&cb);
+            }
+    	    break;
+    }
 		default:
 			break;
     }
@@ -313,10 +449,50 @@ void IecDrive :: talk(void)
 void IecDrive :: set_iec_dir(IecSlave *sl, void *data)
 {
     IecDrive *drive = (IecDrive *)sl;
-    const char *pathstring = (const char *)data;
-    IecPartition *p = drive->vfs->GetPartition(0);
+    const PartitionAndPath *pap = (const PartitionAndPath *) data;
+    const char *pathstring = pap->Path;
+    IecPartition *p = drive->vfs->GetPartition(pap->partition);
+    const char* rootp = p->GetFullRootPath(); 
+    if (strncmp(pathstring, rootp, strlen(rootp))) {
+       p->chroot("/");
+       p->cd(pathstring);
+    } else {
+       int l = strlen(rootp);
+       if (pathstring[l-1] == '/') l--;
+       p->cd(pathstring+l);
+    }
+
+    delete[] pathstring;
+    delete pap;
+}
+
+// called from IEC task, statically
+void IecDrive :: set_iec_root(IecSlave *sl, void *data)
+{
+    IecDrive *drive = (IecDrive *)sl;
+    const PartitionAndPath *pap = (const PartitionAndPath *) data;
+    const char *pathstring = pap->Path;
+    IecPartition *p = drive->vfs->GetPartition(pap->partition);
+    p->chroot(pathstring);
     p->cd(pathstring);
     delete[] pathstring;
+    delete pap;
+}
+
+void IecDrive :: set_iec_cfg(IecSlave *sl, void *data)
+{
+    IecDrive *drive = (IecDrive *)sl;
+    const PartitionAndPath *pap = (const PartitionAndPath *) data;
+    const char *pathstring = pap->Path;
+    int part = pap->partition;
+    if (part >= 1 && part <=12)
+    {
+        IecPartition *p = drive->vfs->GetPartition(pap->partition);
+        drive->cfg->set_string(CFG_IEC_PATH+part, pathstring);
+    }
+    delete[] pathstring;
+    delete pap;
+
 }
 
 // called from critical section

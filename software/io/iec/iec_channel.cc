@@ -3,6 +3,78 @@
 
 const char *modeNames[] = { "", "Read", "Write", "Replace", "Append", "Relative" };
 
+static char *ustr1tok(char *str, const char delim, char **saveptr) {
+  char *tmp;
+
+  if (str)
+    str = *saveptr;
+
+  while (*str == delim) str++;
+
+  if (*str) {
+    tmp = str;
+    while (*tmp && *tmp != delim) tmp++;
+
+    if (*tmp != 0)
+      *tmp++ = 0;
+
+    *saveptr = tmp;
+
+    return str;
+  } else
+    return 0;
+}
+
+static int8_t parse_blockparam(char *parameter, int *values, int maxNumParameters) {
+  uint8_t paramcount = 0;
+  char *str;
+  int res;
+
+  if (!*parameter)
+    return -1;
+  str = strchr(parameter, ':');
+  if (!str)
+    str = parameter; 
+
+  str++;
+
+  while (*str && paramcount < maxNumParameters) {
+    /* Skip all spaces, cursor-rights and commas - CC7C */
+    while (*str == ' ' || *str == 0x1D || *str == ',') str++;
+    if (!*str)
+      break;
+
+    /* Skip leading spaces */
+    while (*str == ' ') str++;
+
+    res = 0;
+    /* Parse decimal number */
+    while (isdigit(*str)) {
+       res *= 10;
+       res += (*str++) - '0';
+    }
+    values[paramcount++] = res;
+  }
+
+  return paramcount;
+}
+
+
+static uint16_t parse_number(uint8_t **str) {
+  uint16_t res = 0;
+
+  /* Skip leading spaces */
+  while (**str == ' ') (*str)++;
+
+  /* Parse decimal number */
+  while (isdigit(**str)) {
+    res *= 10;
+    res += (*(*str)++) - '0';
+  }
+
+  return res;
+}
+
 IecChannel::IecChannel(IecDrive *dr, int ch)
 {
     fm = FileManager::getFileManager();
@@ -506,12 +578,12 @@ void IecChannel::dump_command(command_t& cmd)
 
 void IecChannel::dump_name(name_t& name, const char *id)
 {
-#if IECDEBUG
+// #if IECDEBUG
     const char *n = name.name ? name.name : "(null)";
     printf("%s: [%d:] '%s%s'\n  Mode: %s\n  Dir: %s\n  Explicit Extension: %s\n  Record size: %d\n", id, name.drive, n,
             name.extension, modeNames[name.mode], name.directory ? "Yes" : "No",
             name.explicitExt ? "Yes" : "No", name.recordSize);
-#endif
+// #endif
 }
 
 bool IecChannel::hasIllegalChars(const char *name)
@@ -535,6 +607,7 @@ bool IecChannel::hasIllegalChars(const char *name)
     }
     return false;
 }
+
 
 bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int default_drive, bool doFlags)
 {
@@ -574,37 +647,35 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
     name->name = s;
     int len = strlen(s);
     bool hasDigits = false;
-    int drive = 0;
+    bool hasColonOrIsDirectory = name->directory;
+    for (int i = 0; i < len; i++) 
+       if (s[i] == ':') 
+          hasColonOrIsDirectory = true;
 
-    for (int i = 0; i < len; i++) {
-        if (s[i] == ':') {
-            s[i] = 0;
-            name->name = s + i + 1;
-            // now snoop off the digits and place them into drive number
-            for (int j = 0; j < i; j++) {
-                if (isdigit(s[j])) {
+    int drive = 0;
+    if (hasColonOrIsDirectory)
+       for (int i = 0; i < len; i++) {
+                if (isdigit(s[i])) {
+                    name->name = s + i + 1;
                     drive *= 10;
-                    drive += (s[j] - '0');
+                    drive += (s[i] - '0');
                     hasDigits = true;
                 } else {
-                    return false; // only digits are allowed before the colon!
+                    break;
                 }
-            }
-            break;
-        }
-    }
-    if (hasDigits) {
-        name->drive = drive;
+       if (hasDigits) {
+           name->drive = drive;
+       }
     }
 
     char *parts[3] = { NULL, NULL, NULL };
+
     if (doFlags) {
         split_string(',', name->name, parts, 3);
-        for (int i = 1; i < 3; i++) {
-            if (!parts[i]) {
-                break;
-            }
-            switch (toupper(parts[i][0])) {
+
+    bool skipPart2 = false;        
+       if (parts[1]) {
+            switch (toupper(parts[1][0])) {
             case 'P':
                 if (!name->explicitExt)
                     name->extension = ".prg";
@@ -623,17 +694,25 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
             case 'L':
                 name->extension = ".rel";
                 name->explicitExt = true;
-                if (parts[3 - i]) {
-                    name->recordSize = parts[3 - i][0];
+                if (parts[2]) {
+                    name->recordSize = parts[2][0];
                 }
                 name->mode = e_relative;
-                i = 2;
+                skipPart2 = true;
                 break;
+            default:
+                return false;
+            }
+        }
+
+       if (!skipPart2 && parts[2]) {
+            switch (toupper(parts[2][0])) {
             case 'R':
                 name->mode = e_read;
                 break;
             case 'W':
-                name->mode = e_write;
+                if (name->mode != e_replace)
+                    name->mode = e_write;
                 break;
             case 'A':
                 name->mode = e_append;
@@ -642,11 +721,48 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
                 return false;
             }
         }
+
         if (name->name[0] == '@') {
             name->mode = e_replace;
             name->name++;
         }
     }
+    
+    s=name->name;
+    char *d=s;
+    
+    hasColonOrIsDirectory = false;
+    for (int i = 0; i < len; i++) 
+       if (s[i] == ':') 
+          hasColonOrIsDirectory = true;
+    if (hasColonOrIsDirectory)
+       while (*s && *s != '/' && *s != ':')
+          *s++; 
+    if (!*s)
+       s = name->name;
+
+    if ( (!strcmp(s, "_") && !this->drive->get_cmd_home1()) || (!strcmp(s, ":_") && !this->drive->get_cmd_home2()) )
+    {
+    	name->name = (char*) "..";
+#if IECDEBUG
+      printf("Parsing filename successful.\n");
+      dump_name(*name, "");
+#endif
+
+      return true;
+    }
+    
+    if (*s == '/' && this->drive->get_cmd_paths())
+       *s++;
+
+    while (*s)
+    {
+       if (*s != ':')
+          *d++ = *s;
+       *s++;
+    }
+    *d = 0;
+    
     if (!name->extension) {
         if (name->mode == e_read) {
             name->extension = ".???";
@@ -699,12 +815,21 @@ int IecChannel::setup_directory_read(name_t& name)
         buffer[8 + 16] = 0x22;
     } else {
         const char *fullname = dirPartition->GetFullPath();
-        int pos = 8;
+        int pos;
         int len = strlen(fullname);
-        if (len > 16) {
-            fullname += (len - 16);
+        for (pos=len-2; pos>=0; pos--)
+           if (fullname[pos] == '/')
+           {
+              fullname += pos+1;
+              len -= pos+1;
+              break;
+           }
+           if (len > 16) {
+             fullname += (len - 16);
         }
-        while ((pos < 24) && (*fullname))
+        pos = 8;
+        
+        while ((pos < 24) && (*fullname) && (*fullname != '/'))
             buffer[pos++] = toupper(*(fullname++));
     }
     dir_index = 0;
@@ -717,9 +842,11 @@ int IecChannel::setup_file_access(name_t& name)
 
     partition = drive->vfs->GetPartition(name.drive);
     partition->ReadDirectory();
+    // TODO FIXME: This is broken - name.name should be able to contain path
     int pos = partition->FindIecName(name.name, name.extension, false);
     if ((pos < 0) && !name.explicitExt && (name.mode != e_append) && (name.mode != e_write)) {
         name.extension = ".???";
+    // TODO FIXME: This is broken - name.name should be able to contain path
         pos = partition->FindIecName(name.name, name.extension, false);
     }
 
@@ -749,21 +876,21 @@ int IecChannel::setup_file_access(name_t& name)
             state = e_error;
             return 0;
         }
-        petscii_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+        petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
         //strcpy(fs_filename, name.name);
         strcat(fs_filename, name.extension);
         flags = FA_WRITE | FA_CREATE_NEW | FA_CREATE_ALWAYS;
         break;
 
     case e_replace:
-        petscii_to_fat(name.name, fs_filename, 64);
+        petscii_path_to_fat(name.name, fs_filename, 64);
         //strcpy(fs_filename, name.name);
         strcat(fs_filename, name.extension);
         flags = FA_WRITE | FA_CREATE_ALWAYS;
         break;
 
     case e_relative:
-        petscii_to_fat(name.name, fs_filename, 64);
+        petscii_path_to_fat(name.name, fs_filename, 64);
         strcat(fs_filename, name.extension);
         flags = FA_READ | FA_WRITE | FA_OPEN_ALWAYS;
         break;
@@ -830,7 +957,6 @@ int IecChannel::open_file(void)  // name should be in buffer
     printf("Open file. Raw Filename = '%s'\n", buffer);
 
     fs_filename[0] = 0;
-    uint32_t tr = 0;
 
     parse_filename(channel, (char *) buffer, &name, -1, true);
 
@@ -843,6 +969,46 @@ int IecChannel::open_file(void)  // name should be in buffer
         return setup_buffer_access();
     }
 
+    char* lastSlash = strrchr(name.name, '/');
+
+    if (strcmp(dirPartition->GetFullRootPath(), "/") && lastSlash) // Are we inside a chroot AND does fs_filename contain a path?
+    {
+       int ret;
+    
+       mstring previous_path(dirPartition->GetFullPath());
+
+          petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+          char* lastSlash2 = strrchr(fs_filename, '/');
+          *lastSlash = 0;
+          *lastSlash2 = 0;
+          
+          if (*fs_filename)
+             dirPartition->cd(fs_filename);
+          else
+             dirPartition->cd("/");
+          
+           char tmp[64];
+           strcpy(tmp, lastSlash+1);
+           strcpy(name.name, tmp);
+           
+       *fs_filename = 0;
+
+           ret = open_standard_file();
+
+          dirPartition->GetPath()->cd(previous_path.c_str()); // revert
+          dirPartition->ReadDirectory();
+          
+          return ret;
+
+    }
+    else
+       return open_standard_file();
+}
+
+int IecChannel::open_standard_file(void)  // name should be in buffer
+{
+    uint32_t tr = 0;
+
     drive->get_command_channel()->set_error(ERR_ALL_OK, 0, 0);
     if (!setup_file_access(name)) {
         drive->get_error_string(fs_filename); // abusing this buffer to store temporary error
@@ -851,6 +1017,7 @@ int IecChannel::open_file(void)  // name should be in buffer
         return 0;
     }
 
+    // TODO FIXME: This is broken - names[i].name can contain path
     FRESULT fres = fm->fopen(partition->GetPath(), fs_filename, flags | FA_OPEN_FROM_CBM, &f);
     if (f) {
         printf("Successfully opened file %s in %s\n", fs_filename, partition->GetFullPath());
@@ -1073,6 +1240,7 @@ bool IecCommandChannel::parse_command(char *buffer, int length, command_t *comma
 {
 #if IECDEBUG
     printf("Parsing command: '%s'\n", buffer);
+    dump_hex_relative(buffer, length);
 #endif
     // initialize
     bool digits = false;
@@ -1085,6 +1253,13 @@ bool IecCommandChannel::parse_command(char *buffer, int length, command_t *comma
         if (length < 5) {
             command->cmd[4] = 1; // default for Positioning command
         }
+        return true;
+    }
+    if ((buffer[0] == '\x43') && (buffer[1] == '\xD0') && (length >= 3)) {
+        printf("cP regognised.\n");
+        memcpy(command->cmd, buffer, 2);
+        command->cmd[2] = 0;
+        command->remaining = buffer + 2;
         return true;
     }
 
@@ -1109,6 +1284,8 @@ bool IecCommandChannel::parse_command(char *buffer, int length, command_t *comma
     }
     command->cmd[cmdlen] = 0; // null terminate string
 
+    command->remaining = &buffer[i];
+
     while (isdigit(buffer[i])) {
         digits = true;
         command->digits *= 10;
@@ -1118,18 +1295,7 @@ bool IecCommandChannel::parse_command(char *buffer, int length, command_t *comma
     if (!digits) {
         command->digits = -1;
     }
-    command->remaining = &buffer[i];
-    if (buffer[i] == 0) {
-        return true;
-    }
-    if (buffer[i] != ':') {
-        return false;
-    }
-    i++;
-    command->remaining++;
-    if (buffer[i] == 0) {
-        return true;
-    }
+
     return true;
 }
 
@@ -1154,13 +1320,18 @@ void IecCommandChannel::exec_command(command_t &command)
         p = drive->vfs->GetPartition(command.digits);
         if (isEmptyString(command.remaining)) {
             set_error(ERR_SYNTAX_ERROR_CMD);
-        } else if (p->cd(command.remaining)) {
-            set_error(ERR_ALL_OK);
         } else {
-            set_error(ERR_DIRECTORY_ERROR);
+           name_t name;
+           parse_filename(channel, (char *) command.remaining, &name, -1, true);
+            petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+           if (p->cd(fs_filename)) {
+               set_error(ERR_ALL_OK);
+           } else {
+               set_error(ERR_DIRECTORY_ERROR);
+           }
         }
     } else if (strncmp(command.cmd, "CP", 2) == 0) {
-        if (command.digits < 0) {
+        if (command.digits < drive->get_0_is_current()) {
             set_error(ERR_SYNTAX_ERROR_CMD);
         } else if (command.digits >= MAX_PARTITIONS) {
             set_error(ERR_SYNTAX_ERROR_CMD);
@@ -1173,35 +1344,124 @@ void IecCommandChannel::exec_command(command_t &command)
                 set_error(ERR_PARTITION_ERROR, command.digits);
             }
         }
+    } else if (strncmp(command.cmd, "C\xD0", 2) == 0) {
+        if (command.digits < drive->get_0_is_current()) {
+            set_error(ERR_SYNTAX_ERROR_CMD);
+        } else if (command.digits >= MAX_PARTITIONS) {
+            set_error(ERR_SYNTAX_ERROR_CMD);
+        } else { // partition number found
+            p = drive->vfs->GetPartition(command.remaining[0]);
+            if (p->IsValid()) {
+                set_error(ERR_PARTITION_OK, command.remaining[0]);
+                drive->vfs->SetCurrentPartition(command.remaining[0]);
+            } else {
+                set_error(ERR_PARTITION_ERROR, command.remaining[0]);
+            }
+        }
     } else if (strcmp(command.cmd, "MD") == 0) {
         p = drive->vfs->GetPartition(command.digits);
         if (!p->IsValid()) {
             set_error(ERR_PARTITION_ERROR, command.digits);
         } else if (isEmptyString(command.remaining)) {
             set_error(ERR_SYNTAX_ERROR_CMD);
-        } else if (hasIllegalChars(command.remaining)) {
-            set_error(ERR_SYNTAX_ERROR_CMD);
-        } else if (p->MakeDirectory(command.remaining) == FR_OK) {
-            set_error(ERR_ALL_OK);
+        //} else if (p->MakeDirectory(command.remaining) == FR_OK) {
+        //    set_error(ERR_ALL_OK);
         } else {
-            set_error(ERR_DIRECTORY_ERROR);
+              name_t name;
+              parse_filename(channel, (char *) command.remaining, &name, -1, true);
+                petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+                char* fs_filename_fn = fs_filename;
+                char* lastSlash = strrchr(fs_filename, '/');
+                mstring previous_path(p->GetFullPath());
+                if (lastSlash)
+                {
+                   *lastSlash = 0;
+                   if (*fs_filename)
+                      p->cd(fs_filename);
+                   else
+                      p->cd("/");
+                   fs_filename_fn = lastSlash+1;
+                }
+                
+                if (p->MakeDirectory(fs_filename_fn) == FR_OK) {
+               set_error(ERR_ALL_OK);
+           } else {
+               set_error(ERR_DIRECTORY_ERROR);
+           }
+           
+           if (lastSlash)
+           {
+              p->GetPath()->cd(previous_path.c_str()); // revert
+              p->ReadDirectory();
+           }
         }
     } else if (strcmp(command.cmd, "RD") == 0) {
-        p = drive->vfs->GetPartition(command.digits);
-        int f = p->Remove(command, true);
-        if (f < 0) {
-            set_error(ERR_SYNTAX_ERROR_CMD);
-        } else {
-            set_error(ERR_FILES_SCRATCHED, f);
-        }
+        char *filename,*tmp;
+        filename = ustr1tok(command.remaining,',',&tmp);
+        int f = 0;
+        while (filename) {
+           name_t name;
+           parse_filename(channel, filename, &name, -1, false);
+            p = drive->vfs->GetPartition(name.drive);
+                petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+                char* fs_filename_fn = fs_filename;
+                char* lastSlash = strrchr(fs_filename, '/');
+                mstring previous_path(p->GetFullPath());
+                if (lastSlash)
+                {
+                   *lastSlash = 0;
+                   if (*fs_filename)
+                      p->cd(fs_filename);
+                   else
+                      p->cd("/");
+                   fs_filename_fn = lastSlash+1;
+                }
+                
+                f += p->Remove(&name, true);
+           
+              if (lastSlash)
+              {
+                 p->GetPath()->cd(previous_path.c_str()); // revert
+                 p->ReadDirectory();
+              }
+           }
+
+           filename = ustr1tok(NULL,',',&tmp);
+
+        set_error(ERR_FILES_SCRATCHED, f);
     } else if (strncmp(command.cmd, "SCRATCH", strlen(command.cmd)) == 0) {
-        p = drive->vfs->GetPartition(command.digits);
-        int f = p->Remove(command, false);
-        if (f < 0) {
-            set_error(ERR_SYNTAX_ERROR_CMD);
-        } else {
-            set_error(ERR_FILES_SCRATCHED, f);
-        }
+        char *filename,*tmp;
+        filename = ustr1tok(command.remaining,',',&tmp);
+        int f = 0;
+        while (filename) 
+        {
+           name_t name;
+           parse_filename(channel, filename, &name, -1, false);
+            p = drive->vfs->GetPartition(name.drive);
+                petscii_path_to_fat(name.name, fs_filename, 64); // we may convert it back later!!
+                char* fs_filename_fn = fs_filename;
+                char* lastSlash = strrchr(fs_filename, '/');
+                mstring previous_path(p->GetFullPath());
+                if (lastSlash)
+                {
+                   *lastSlash = 0;
+                   if (*fs_filename)
+                      p->cd(fs_filename);
+                   else
+                      p->cd("/");
+                   fs_filename_fn = lastSlash+1;
+                }
+                
+                f += p->Remove(&name, false);
+              if (lastSlash)
+              {
+                 p->GetPath()->cd(previous_path.c_str()); // revert
+                 p->ReadDirectory();
+              }
+
+           }
+           filename = ustr1tok(NULL,',',&tmp);
+           set_error(ERR_FILES_SCRATCHED, f);
     } else if (strncmp(command.cmd, "RENAME", strlen(command.cmd)) == 0) {
         renam(command);
     } else if (strncmp(command.cmd, "COPY", strlen(command.cmd)) == 0) {
@@ -1209,6 +1469,8 @@ void IecCommandChannel::exec_command(command_t &command)
     } else if (strncmp(command.cmd, "INITIALIZE", strlen(command.cmd)) == 0) {
         set_error(ERR_ALL_OK);
     } else if (strcmp(command.cmd, "UI") == 0) {
+        set_error(ERR_DOS);
+    } else if (strcmp(command.cmd, "UJ") == 0) {
         set_error(ERR_DOS);
     } else { // unknown command
         set_error(ERR_SYNTAX_ERROR_CMD);
@@ -1230,7 +1492,13 @@ void IecCommandChannel::block_command(command_t& cmd)
         }
         operation = cmd.digits;
     } else { // must be B-
-        int n = sscanf(cmd.remaining, "%d%d%d%d", &ch, &dr, &tr, &sc);
+        int parameter[4] = {0, 0, 0, 0};
+        int n = parse_blockparam(cmd.remaining, parameter, 4);
+        ch=parameter[0];
+        dr=parameter[1];
+        tr=parameter[2];
+        sc=parameter[3];
+        // int n = sscanf(cmd.remaining+1, "%d%d%d%d", &ch, &dr, &tr, &sc);
         switch (cmd.cmd[2]) {
         case 'R':
             operation = 3;
@@ -1260,11 +1528,18 @@ void IecCommandChannel::block_command(command_t& cmd)
 
     // when we get here, it's either U1, U2, B-R or B-W, which all take 4 params
 
-    int n = sscanf(cmd.remaining, "%d%d%d%d", &ch, &dr, &tr, &sc);
+    int parameter[4] = {0, 0, 0, 0};
+    int n = parse_blockparam(cmd.remaining+1, parameter, 4);
+    ch=parameter[0];
+    dr=parameter[1];
+    tr=parameter[2];
+    sc=parameter[3];
+    // int n = sscanf(cmd.remaining+1, "%d%d%d%d", &ch, &dr, &tr, &sc);
     if ((n != 4) || (ch < 0) || (ch > 14)) { // illegal
         set_error(ERR_SYNTAX_ERROR_CMD);
         return;
     }
+
     if (dr >= MAX_PARTITIONS) {
         set_error(ERR_SYNTAX_ERROR_CMD);
         return;
@@ -1327,11 +1602,55 @@ void IecCommandChannel::renam(command_t& cmd)
         return;
     }
 
-    strcpy(toName, destination.name);
+    // strcpy(toName, destination.name);
     toPart = destination.drive;
 
+    IecPartition *partitionFrom = drive->vfs->GetPartition(source.drive);
+    IecPartition *partitionTo = drive->vfs->GetPartition(toPart);
+
+                char* lastSlash1 = strrchr(source.name, '/');
+                char* lastSlash2 = strrchr(destination.name, '/');
+                if (lastSlash1)
+                   *lastSlash1 = 0;
+                if (lastSlash2)
+                   *lastSlash2 = 0;
+                   
+               if (lastSlash1 || lastSlash2)
+               {
+                  if (lastSlash1 && lastSlash2)
+                  {
+                      if (strcmp(source.name, destination.name) || (partitionFrom->GetPartitionNumber() != partitionTo->GetPartitionNumber() ) )
+                      {
+                      set_error(ERR_SYNTAX_ERROR_CMD);
+                      return;
+                      }
+                  }
+                  else
+                  {
+                      set_error(ERR_SYNTAX_ERROR_CMD);
+                      return;
+                  }
+                  petscii_path_to_fat(lastSlash2+1, toName, 64); // we may convert it back later!!
+               }
+               else
+                  petscii_path_to_fat(destination.name, toName, 64); // we may convert it back later!!
+                
+                mstring previous_path(partitionFrom->GetFullPath());
+                if (lastSlash1)
+                {
+                   if (*source.name)
+                   {
+                      petscii_path_to_fat(destination.name, fs_filename, 64); // we may convert it back later!!
+                      partitionFrom->cd( fs_filename );
+                   }
+                   else
+                      partitionFrom->cd("/");
+                   strcpy(fromName, lastSlash1+1);
+                }
+                else
+                   strcpy(fromName, source.name);
+
     const char *fromExt = ".???";
-    strcpy(fromName, source.name);
     fromPart = source.drive;
 
     // does the source name have an extension specified?
@@ -1341,10 +1660,15 @@ void IecCommandChannel::renam(command_t& cmd)
 
     printf("From: %d:%s%s To: %d:%s%s \n", fromPart, fromName, fromExt, toPart, toName, destination.extension);
 
-    IecPartition *partitionFrom = drive->vfs->GetPartition(fromPart);
+    // TODO FIXME: This is broken - fromName can contain path
     partitionFrom->ReadDirectory();
     int posFrom = partitionFrom->FindIecName(fromName, fromExt, true);
     if (posFrom < 0) {
+        if (lastSlash1)
+        {
+                 partitionFrom->GetPath()->cd(previous_path.c_str()); // revert
+                 partitionFrom->ReadDirectory();
+        }
         set_error(ERR_FILE_NOT_FOUND, 0);
         return;
     }
@@ -1357,10 +1681,14 @@ void IecCommandChannel::renam(command_t& cmd)
         add_extension(toName, destination.extension, 32);
     }
 
-    IecPartition *partitionTo = drive->vfs->GetPartition(toPart);
-
     // Just try the actual rename by the filesystem
     FRESULT fres = fm->rename(partitionFrom->GetPath(), fromInfo->lfname, partitionTo->GetPath(), toName);
+                  if (lastSlash1)
+              {
+                 partitionFrom->GetPath()->cd(previous_path.c_str()); // revert
+                 partitionFrom->ReadDirectory();
+              }
+
     if (fres == FR_OK) {
         set_error(ERR_ALL_OK, 0);
         return;
@@ -1390,8 +1718,11 @@ void IecCommandChannel::copy(command_t& cmd)
         return;
     }
 
-    FileInfo *infos[4] = { 0, 0, 0, 0 };
+    // FileInfo *infos[4] = { 0, 0, 0, 0 };
     name_t names[4];
+    mstring filenames[4];
+    mstring paths[4];
+    char extension[4];
 
     // First try to find all (possibly) four sources
     for (int i = 0; i < 4; i++) {
@@ -1403,20 +1734,53 @@ void IecCommandChannel::copy(command_t& cmd)
             set_error(ERR_SYNTAX_ERROR_CMD, i + 1);
             return;
         }
-
         IecPartition *partitionFrom = drive->vfs->GetPartition(names[i].drive);
+        char* lastSlash1 = strrchr(names[i].name, '/');
+        char * filenameFrom;
+        mstring previous_path(partitionFrom->GetFullPath());
+        if (lastSlash1)
+        {
+           *lastSlash1 = 0;
+
+           petscii_path_to_fat(names[i].name, fs_filename, 64); // we may convert it back later!!
+           partitionFrom->cd( fs_filename );
+           
+           filenameFrom = lastSlash1+1;
+           *lastSlash1 = '/';
+        }
+        else
+        {
+           filenameFrom = names[i].name;
+        }
+printf("Searching file: %s\n", filenameFrom);
+printf("in directory: %s\n", partitionFrom->GetFullPath()); 
+        // TODO FIXME: This is broken - names[i].name can contain path
         partitionFrom->ReadDirectory();
-        int posFrom = partitionFrom->FindIecName(names[i].name, "???", false);
+        int posFrom = partitionFrom->FindIecName(filenameFrom, "???", false);
         if (posFrom < 0) {
             set_error(ERR_FILE_NOT_FOUND, i);
             return;
         }
         FileInfo *info = partitionFrom->GetSystemFile(posFrom);
+        mstring new_path(partitionFrom->GetFullPath());
+        paths[i] = new_path;
+        filenames[i] = mstring(info->lfname);
+        if (!i)
+           strcpy(extension, info->extension);
+        
 #if IECDEBUG
         printf("Found matching file %d: %s -> %s\n", i, files[i], info->lfname);
 #endif
-        infos[i] = info;
-        if (info->attrib & AM_DIR) {
+
+        uint8_t attrib = info->attrib;
+
+        if (lastSlash1)
+        {
+                 partitionFrom->GetPath()->cd(previous_path.c_str()); // revert
+                 partitionFrom->ReadDirectory();
+        }
+
+        if (attrib & AM_DIR) {
             set_error(ERR_FILE_TYPE_MISMATCH, i);
             return;
         }
@@ -1424,17 +1788,46 @@ void IecCommandChannel::copy(command_t& cmd)
 
     // Now try to create the output file
     IecPartition *partitionTo = drive->vfs->GetPartition(destination.drive);
+    mstring previous_path_to(partitionTo->GetFullPath());
     char toName[32];
-    strcpy(toName, destination.name);
+    char* lastSlash2 = strrchr(destination.name, '/');
+                    if (lastSlash2)
+                   *lastSlash2 = 0;
+
+               if (lastSlash2)
+               {
+                  petscii_path_to_fat(lastSlash2+1, toName, 64); // we may convert it back later!!
+                   if (*toName)
+                   {
+                      petscii_path_to_fat(destination.name, fs_filename, 64); // we may convert it back later!!
+                      partitionTo->cd( fs_filename );
+                   }
+                   else
+                      partitionTo->cd("/");
+               }
+               else
+                  petscii_path_to_fat(destination.name, toName, 64); // we may convert it back later!!
+
     // Take the extension from the first file to copy
     if (destination.explicitExt) {
         add_extension(toName, destination.extension, 32);
     } else {
-        add_extension(toName, infos[0]->extension, 32);
+        add_extension(toName, extension, 32);
     }
+
+printf("Creating file: %s\n", toName);
+printf("in directory: %s\n", partitionTo->GetFullPath()); 
 
     File *fo;
     FRESULT fres = fm->fopen(partitionTo->GetPath(), toName, (FA_WRITE | FA_CREATE_NEW | FA_CREATE_ALWAYS), &fo);
+    
+        if (lastSlash2)
+        {
+                 partitionTo->GetPath()->cd(previous_path_to.c_str()); // revert
+                 partitionTo->ReadDirectory();
+        }
+
+    
     if (fres == FR_EXIST) {
         set_error(ERR_FILE_EXISTS, 0);
         return;
@@ -1448,12 +1841,13 @@ void IecCommandChannel::copy(command_t& cmd)
     if (fo) {
         // okay, the output file is now finally open, let's read the input files and write them to the output file
         for (int i = 0; i < 4; i++) {
-            if (!infos[i]) {
+            if (!files[i]) {
                 break;
             }
-            IecPartition *partitionFrom = drive->vfs->GetPartition(names[i].drive);
+            // IecPartition *partitionFrom = drive->vfs->GetPartition(names[i].drive);
             File *fi;
-            FRESULT fres = fm->fopen(partitionFrom->GetPath(), infos[i]->lfname, FA_READ, &fi);
+            Path p(paths[i].c_str());
+            FRESULT fres = fm->fopen(&p, filenames[i].c_str(), FA_READ, &fi);
             if (fres != FR_OK) {
                 fm->fclose(fo);
                 set_error(ERR_FRESULT_CODE, fres);
@@ -1461,7 +1855,7 @@ void IecCommandChannel::copy(command_t& cmd)
             }
             if (fi) {
 #if IECDEBUG
-                printf("Opened '%s' for copy.\n", infos[i]->lfname);
+                printf("Opened '5s' / '%s' for copy.\n", paths[i].c_str(), filenames[i].c_str());
 #endif
                 uint32_t transferred = 1;
                 while (transferred) {
@@ -1525,18 +1919,39 @@ t_channel_retval IecCommandChannel::push_command(uint8_t b)
 void IecPartition::SetInitialPath(void)
 {
     char temp[120];
-    char temp2[8];
+    
+    const char *rp = vfs->GetRootPath(partitionNumber);
+    if (!rp) return;
 
-    strcpy(temp, vfs->GetRootPath());
+    strcpy(temp, rp);
     if (temp[strlen(temp) - 1] != '/') {
         strcat(temp, "/");
     }
-    if (partitionNumber > 0) {
-        sprintf(temp2, "%d", partitionNumber);
-        strcat(temp, temp2);
-    }
+    
     printf("Partition command. CD to '%s'\n", temp);
-    path->cd(temp);
+    char* slashslash = strstr(temp, "//");
+    if ( slashslash )
+    {
+       *slashslash = 0;
+       rootpath->cd(temp);
+       path->cd(temp);
+    printf("Setting rootpath to '%s'\n", temp);
+       
+       *slashslash = '/';
+       if (slashslash[2])
+       {
+          path->cd(slashslash+2);
+          printf("Setting path to '%s'\n", slashslash+2);
+    }
+    }
+    else
+    {
+       rootpath->cd("/");
+       path->cd(temp);
+    }
+    
+    printf("rootpath=%s\n", rootpath->get_path());
+    printf("path=%s\n", path->get_path());
 }
 
 bool IecPartition::IsValid()

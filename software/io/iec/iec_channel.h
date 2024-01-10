@@ -54,6 +54,7 @@ class IecPartition {
     IndexedList<FileInfo *> *dirlist;
     IndexedList<char *> *iecNames;
     Path *path;
+    Path *rootpath;
     FileManager *fm;
     IecFileSystem *vfs;
     int partitionNumber;
@@ -65,6 +66,7 @@ public:
         this->vfs = vfs;
         partitionNumber = nr;
         path = fm->get_new_path("IEC Partition");
+        rootpath = fm->get_new_path("IEC Partition");
         dirlist = NULL;
         iecNames = NULL;
         dirlist = new IndexedList<FileInfo *>(8, NULL);
@@ -78,6 +80,7 @@ public:
         delete dirlist;
         delete iecNames;
         fm->release_path(path);
+        fm->release_path(rootpath);
     }
 
     int GetPartitionNumber(void)
@@ -208,9 +211,19 @@ public:
         return path;
     }
 
+    Path *GetRootPath()
+    {
+        return rootpath;
+    }
+
     const char *GetFullPath()
     {
         return path->get_path();
+    }
+
+    const char *GetFullRootPath()
+    {
+        return rootpath->get_path();
     }
 
     FRESULT MakeDirectory(const char *name)
@@ -224,8 +237,8 @@ public:
         FRESULT res = fm->delete_file(path, name);
         return res;
     }
-
-    bool cd(const char *name)
+    
+    bool chroot(const char *name)
     {
         if (name[0] == '_') { // left arrow
             // return to root of partition
@@ -255,6 +268,7 @@ public:
         }
         FRESULT res = ReadDirectory(); // just try!
         if (res == FR_OK) {
+            rootpath->cd(GetFullPath());
             return true;
         }
         path->cd(previous_path.c_str()); // revert
@@ -262,25 +276,80 @@ public:
         return false;
     }
 
-    int Remove(command_t& command, bool dir)
+    bool cd(const char *name)
     {
-        if (!command.remaining) {
+/////// FIXME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+        if (name[0] == '_') { // left arrow
+            // return to root of partition
+            SetInitialPath();
+            if (!fm->is_path_valid(path)) {
+                CleanupDir();
+                return false;
+            }
+            FRESULT res = ReadDirectory(); // just try!
+            if (res == FR_OK) {
+                return true;
+            }
+            return false;
+        }
+
+        // Not the <- case
+        mstring previous_path(path->get_path());
+        const char* rootp = rootpath->get_path();
+printf("DEBUG1; rootp=%s\n", rootpath->get_path() );
+        if ((name[0] == '/'))
+        {
+           path->cd(rootp);
+           name++;
+        }
+printf("DEBUG2: CWS=%s\n", path->get_path() );
+        if (!fm->is_path_valid(path)) {
+            path->cd(previous_path.c_str()); // revert
+            return false;
+        }
+        int index = FindIecName(name, "DIR", true);
+        if (index >= 0) {
+            FileInfo *inf = (*dirlist)[index];
+            name = inf->lfname;
+        }
+        if (*name)
+           path->cd(name);  // just try!
+printf("DEBUG3: CWS=%s\n", path->get_path() );
+        if (!fm->is_path_valid(path)) {
+            path->cd(previous_path.c_str()); // revert
+            return false;
+        }
+        const char* cwd = path->get_path();
+printf("DEBUG4: rootp=%s\n", rootp );
+
+        if (strncmp(cwd, rootp, strlen(rootp))) {
+            path->cd(previous_path.c_str()); // revert
+            return false;
+        }
+printf("DEBUG5\n");
+        
+        FRESULT res = ReadDirectory(); // just try!
+        if (res == FR_OK) {
+            return true;
+        }
+printf("DEBUG6ERR\n");
+        path->cd(previous_path.c_str()); // revert
+        ReadDirectory();
+        return false;
+    }
+
+    int Remove(name_t *name, bool dir)
+    {
+        if (!name->name) {
             return -1;
         }
-        int f = 0;
-        char *filenames[5] = { 0, 0, 0, 0, 0 };
-        split_string(',', command.remaining, filenames, 5);
         ReadDirectory();
-        for (int i = 0; i < 5; i++) {
-            if (!filenames[i]) {
-                break;
-            }
-            //name_t name;
-            //parse_filename(filenames[i], &name, false);
+            int f = 0;
             int idx = -1;
             for (int fl = 0; fl < iecNames->get_elements(); fl++) {
                 char *iecName = (*iecNames)[fl];
-                if (pattern_match(filenames[i], &iecName[3], false)) {
+                if (pattern_match(name->name, &iecName[3], false)) {
                     FileInfo *inf = (*dirlist)[fl];
                     if (((inf->attrib & AM_DIR) && !dir) || (!(inf->attrib & AM_DIR) && dir)) {
                         continue; // skip entries that are not of the right type
@@ -297,7 +366,6 @@ public:
                 }
             }
 
-        }
         return f;
     }
 };
@@ -315,8 +383,9 @@ public:
         for (int i = 0; i < MAX_PARTITIONS; i++) {
             partitions[i] = 0;
         }
-        currentPartition = 0;
-        partitions[0] = new IecPartition(this, 0);
+        currentPartition = 1;
+        for (int i=1; i<=12; i++)
+           partitions[i] = new IecPartition(this, i);
     }
 
     ~IecFileSystem() 
@@ -328,9 +397,9 @@ public:
         }
     }
 
-    const char *GetRootPath()
+    const char *GetRootPath(int partitionNumber)
     {
-        return drive->get_root_path();
+        return drive->get_root_path(partitionNumber); 
     }
 
     const char *GetPartitionPath(int index)
@@ -343,7 +412,7 @@ public:
 
     IecPartition *GetPartition(int index)
     {
-        if (index < 0) {
+        if (index < drive->get_0_is_current()) {
             index = currentPartition;
         }
         if (!partitions[index]) {
@@ -397,13 +466,14 @@ class IecChannel {
     char fs_filename[64];
 
 private:
-    static bool parse_filename(int channel, char *buffer, name_t *name, int default_drive, bool doFlags);
+    bool parse_filename(int channel, char *buffer, name_t *name, int default_drive, bool doFlags);
     int setup_directory_read(name_t& name);
     int setup_file_access(name_t &name);
     int setup_buffer_access(void);
     int init_iec_transfer(void);
 
     int open_file(void);  // name should be in buffer
+    int open_standard_file(void);  // name should be in buffer
     int close_file(void); // file should be open
     int read_dir_entry(void);
     void swap_buffers(void);

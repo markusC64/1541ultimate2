@@ -10,6 +10,12 @@
 #include "disk_image.h"
 #include "iec_interface.h"
 
+struct PartitionAndPath
+{
+   int partition;
+   const char *Path;
+};
+
 class IecChannel;
 class IecCommandChannel;
 class IecFileSystem;
@@ -38,12 +44,16 @@ class IecDrive : public IecSlave, SubSystem, ObjectWithMenu, ConfigurableObject
     const char *rootPath;
  
     static void set_iec_dir(IecSlave *obj, void *path);
+    static void set_iec_root(IecSlave *obj, void *path);
+    static void set_iec_cfg(IecSlave *obj, void *path);
 
     struct {
         Action *turn_on;
         Action *turn_off;
     	Action *reset;
         Action *set_dir;
+        Action *set_root;
+        Action *set_cfg;
     } myActions;
 public:
     IecDrive();
@@ -85,8 +95,13 @@ public:
     int get_error_string(char *); // writes string into buffer
     IecCommandChannel *get_command_channel();
     IecCommandChannel *get_data_channel(int chan);
-    const char *get_root_path();
+    const char *get_root_path(int partition);
     const char *get_partition_dir(int p);
+    
+    int get_0_is_current();
+    int get_cmd_paths();
+    int get_cmd_home1();
+    int get_cmd_home2();
 
     friend class IecChannel;
     friend class IecCommandChannel;
