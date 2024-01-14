@@ -34,7 +34,9 @@ class IecDrive : public IecSlave, SubSystem, ObjectWithMenu, ConfigurableObject
     IecChannel *channels[16];
     int current_channel;
 
+public:
     int last_error_code;
+private:
     int last_error_track;
     int last_error_sector;
     uint8_t last_track;

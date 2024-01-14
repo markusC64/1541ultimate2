@@ -196,6 +196,18 @@ t_channel_retval IecChannel::pop_more(int pop_size)
                 return IEC_OK;
         }
         break;
+    case e_partdir:
+        if (pointer == last_byte) {
+            state = e_complete;
+            return IEC_NO_FILE; // no more data?
+        }
+        pointer += pop_size;
+        if (pointer == 32) {
+            while (read_partdir_entry())
+                ;
+            return IEC_OK;
+        }
+        break;
     case e_dir:
         if (pointer == last_byte) {
             state = e_complete;
@@ -244,6 +256,16 @@ t_channel_retval IecChannel::pop_data(void)
                 return IEC_OK;
         }
         break;
+    case e_partdir:
+        if (pointer == last_byte) {
+            state = e_complete;
+            return IEC_NO_FILE; // no more data?
+        } else if (pointer == 31) {
+            while (read_partdir_entry())
+                ;
+            return IEC_OK;
+        }
+        break;
     case e_dir:
         if (pointer == last_byte) {
             state = e_complete;
@@ -275,6 +297,79 @@ t_channel_retval IecChannel::pop_data(void)
 
     pointer++;
     return IEC_OK;
+}
+
+int IecChannel::read_partdir_entry(void)
+{
+   // dir_index
+   
+   if (dir_index) while (dir_index < 13)
+   {
+      IecPartition *partitionFrom = drive->vfs->GetPartition(dir_index);
+      if (partitionFrom->IsValid())
+         break;
+      dir_index++;
+   }
+   
+   if (dir_index == 13)
+   {
+        buffer[0] = 0;
+        buffer[1] = 0;
+        buffer[2] = 0;
+        last_byte = 2;
+        pointer = 0;
+        prefetch_max = 2;
+        prefetch = 0;
+        return 0;
+   }
+   
+    uint32_t size = dir_index;
+    uint32_t size2 = size;
+    int chars = 1;
+    while (size2 >= 10) {
+        size2 /= 10;
+        chars++;
+    }
+    int spaces = 3 - chars;
+    buffer[2] = size & 255;
+    buffer[3] = size >> 8;
+    int pos = 4;
+    while ((spaces--) >= 0)
+        buffer[pos++] = 32;
+    buffer[pos++] = 34;
+    char name[16];
+    if (dir_index)
+    {
+       sprintf(name, "PARTITION %d", dir_index);
+    }
+    else
+    {
+       sprintf(name, "SYSTEM", dir_index);
+    }
+    
+    const char *src = name;
+    while (*src)
+        buffer[pos++] = *(src++);
+    buffer[pos++] = 34;
+    while (pos < 32)
+        buffer[pos++] = 32;
+
+    if (dir_index)
+    {
+       memcpy(&buffer[27 - chars], "NAT", 3);
+    }
+    else
+    {
+       memcpy(&buffer[27 - chars], "SYS", 3);
+    }
+
+    buffer[31] = 0;
+    pointer = 0;
+    prefetch_max = 32;
+    prefetch = 0;
+    dir_index++;
+
+    return 0;
 }
 
 int IecChannel::read_dir_entry(void)
@@ -622,6 +717,7 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
     name->mode = (channel == 0) ? e_read : ((channel == 1) ? e_write : e_read);
     name->name = buffer;
     name->directory = false;
+    name->partitionDirectory = false;
     name->recordSize = 0;
 
     char *s = buffer;
@@ -633,9 +729,15 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
     if (*s == '$') {
         name->directory = true;
         s++;
+        if ((*s == '=') && (s[1] == 'P'))
+        {
+           name->partitionDirectory = true;
+           s+=2;
+        }
     } else if (*s == '#') {
         name->buffer = true;
         s++;
+        
     } else {
         // Handle the case of the @ before the :
         if (*s == '@') {
@@ -777,6 +879,38 @@ bool IecChannel::parse_filename(int channel, char *buffer, name_t *name, int def
 #endif
 
     return true;
+}
+
+int IecChannel::setup_partitionDirectory_read(name_t& name)
+{
+    state = e_partdir;
+    pointer = 0;
+    prefetch = 0;
+    prefetch_max = 32;
+    last_byte = -1;
+    memcpy(buffer, c_header, 32);
+    buffer[4] = 0;
+
+        const char *fullname = "ULTIMATE";
+        int pos = 8;
+        int len = strlen(fullname);
+        while (*fullname)
+            buffer[pos++] = *(fullname++);
+
+    uint32_t size = 0;
+       for (int di = 1; di < 13; di++)
+       {
+         IecPartition *partitionFrom = drive->vfs->GetPartition(di);
+         if (partitionFrom->IsValid())
+            size++; // size = di;
+      }
+
+    buffer[4] = size & 255;
+    buffer[5] = size >> 8;
+
+    dir_index = 0;
+    return 0;
+
 }
 
 int IecChannel::setup_directory_read(name_t& name)
@@ -963,6 +1097,8 @@ int IecChannel::open_file(void)  // name should be in buffer
     dirPartition = drive->vfs->GetPartition(name.drive);
     recordSize = 0;
 
+    if (name.partitionDirectory)
+        return setup_partitionDirectory_read(name);
     if (name.directory) {
         return setup_directory_read(name);
     } else if (name.buffer) {
@@ -1067,7 +1203,7 @@ int IecChannel::ext_open_file(const char *name)
     pointer = strlen((char *) buffer);
 
     int result = open_file();
-    if (state == e_dir || state == e_file) {
+    if (state == e_dir || state == e_file || state == e_partdir ) {
         return 1;
     }
     return 0;
@@ -1181,11 +1317,24 @@ void IecCommandChannel::set_error(int err, int track, int sector)
 
 void IecCommandChannel::get_error_string(void)
 {
-    last_byte = drive->get_error_string((char *) buffer) - 1;
-    //printf("Get last error: last = %d. buffer = %s.\n", last_byte, buffer);
-    pointer = 0;
-    prefetch = 0;
-    prefetch_max = last_byte;
+    if (drive->last_error_code >= 0)
+    {
+       last_byte = drive->get_error_string((char *) buffer) - 1;
+       //printf("Get last error: last = %d. buffer = %s.\n", last_byte, buffer);
+       pointer = 0;
+       prefetch = 0;
+       prefetch_max = last_byte;
+    }
+    else
+    {
+       uint8_t numBytes = result[0];
+       memcpy(buffer, result+1, numBytes);
+       last_byte = numBytes;
+       //printf("Get last error: last = %d. buffer = %s.\n", last_byte, buffer);
+       pointer = 0;
+       prefetch = 0;
+       prefetch_max = last_byte;
+    }
 
     drive->set_error(0, 0, 0);
 }
@@ -1260,6 +1409,21 @@ bool IecCommandChannel::parse_command(char *buffer, int length, command_t *comma
         memcpy(command->cmd, buffer, 2);
         command->cmd[2] = 0;
         command->remaining = buffer + 2;
+        return true;
+    }
+    if ((buffer[0] == 'M') && (buffer[1] == '-')  && (buffer[2] == 'R') && (length >= 3)) {
+        printf("m-r regognised.\n");
+        memcpy(command->cmd, buffer, 3);
+        command->cmd[3] = 0;
+        command->remaining = buffer + 3;
+        return true;
+    }
+    if ((buffer[0] == 'G') && (buffer[1] == '-')  && (buffer[2] == 'P') && (length >= 3)) {
+        printf("g-p regognised.\n");
+        memcpy(command->cmd, buffer, 3);
+        command->cmd[3] = 0;
+        buffer[length] = 0;
+        command->remaining = buffer + 3;
         return true;
     }
 
@@ -1472,6 +1636,28 @@ void IecCommandChannel::exec_command(command_t &command)
         set_error(ERR_DOS);
     } else if (strcmp(command.cmd, "UJ") == 0) {
         set_error(ERR_DOS);
+    } else if (strncmp(command.cmd, "M-R", 3) == 0) {
+        uint8_t numBytes = command.remaining[2];
+        result[0] = numBytes;
+        memset(result+1, 42, (size_t) numBytes);
+        set_error(ERR_ALL_OK);
+        drive->last_error_code = -1;        
+    } else if (strncmp(command.cmd, "G-P", 3) == 0) {
+        uint8_t part = command.remaining[0];
+        IecPartition *partitionFrom = drive->vfs->GetPartition(part);
+        result[0] = 30;
+        memset(result+1, 0, (size_t) 30);
+        result[1] = 1;
+        result[2] = 0xE2;
+        result[3] = partitionFrom->GetPartitionNumber();
+        memset(result+4, 160, 16);
+        result[4]='N';
+        result[5]='/';
+        result[6]='A';
+        result[28] = result[29] = result[30] = 255;
+        
+        set_error(ERR_ALL_OK);
+        drive->last_error_code = -1;        
     } else { // unknown command
         set_error(ERR_SYNTAX_ERROR_CMD);
     }
@@ -1921,7 +2107,12 @@ void IecPartition::SetInitialPath(void)
     char temp[120];
     
     const char *rp = vfs->GetRootPath(partitionNumber);
-    if (!rp) return;
+    if (!rp)
+    {
+       rootpath->cd("/");
+       path->cd("/NotExists");
+       return;
+    }
 
     strcpy(temp, rp);
     if (temp[strlen(temp) - 1] != '/') {

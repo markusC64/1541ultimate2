@@ -9,7 +9,7 @@
 #include "mystring.h"
 
 typedef enum _t_channel_state {
-    e_idle, e_filename, e_file, e_dir, e_record, e_buffer, e_complete, e_error, e_status
+    e_idle, e_filename, e_file, e_dir, e_partdir, e_record, e_buffer, e_complete, e_error, e_status
     
 } t_channel_state;
 
@@ -33,6 +33,7 @@ typedef struct _name_t {
     int drive;
     char *name;
     bool directory;
+    bool partitionDirectory;
     bool buffer;
     bool explicitExt;
     const char *extension;
@@ -468,6 +469,7 @@ class IecChannel {
 private:
     bool parse_filename(int channel, char *buffer, name_t *name, int default_drive, bool doFlags);
     int setup_directory_read(name_t& name);
+    int setup_partitionDirectory_read(name_t& name);
     int setup_file_access(name_t &name);
     int setup_buffer_access(void);
     int init_iec_transfer(void);
@@ -475,6 +477,7 @@ private:
     int open_file(void);  // name should be in buffer
     int open_standard_file(void);  // name should be in buffer
     int close_file(void); // file should be open
+    int read_partdir_entry(void);
     int read_dir_entry(void);
     void swap_buffers(void);
     int read_block(void);
@@ -510,6 +513,7 @@ public:
 
 class IecCommandChannel: public IecChannel {
     uint8_t wr_buffer[64];
+    uint8_t result[256];
     int wr_pointer;
 
     void mem_read(void);
